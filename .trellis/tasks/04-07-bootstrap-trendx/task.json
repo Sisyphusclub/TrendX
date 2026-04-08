@@ -1,0 +1,60 @@
+{
+  "id": "bootstrap-trendx",
+  "name": "bootstrap-trendx",
+  "title": "Bootstrap TrendX project foundation",
+  "description": "Establish the initial project definition, repository entrypoint, and first implementation path for TrendX.",
+  "status": "in_progress",
+  "dev_type": "fullstack",
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "Blur",
+  "assignee": "Blur",
+  "createdAt": "2026-04-07",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "README.md",
+    ".trellis/tasks/04-07-bootstrap-trendx/prd.md",
+    ".trellis/spec/backend/index.md",
+    ".trellis/spec/frontend/index.md",
+    ".trellis/spec/shared/index.md",
+    ".trellis/spec/guides/index.md"
+  ],
+  "notes": "Project kickoff task for turning the TrendX repository into a real product codebase using the selected Trellis nextjs-fullstack template. Template paths such as packages/* and @your-app/* are target architecture references until the actual app scaffold is created.",
+  "meta": {}
+}

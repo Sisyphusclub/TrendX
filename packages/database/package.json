@@ -1,0 +1,21 @@
+{
+  "name": "@trendx/database",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
+    "lint": "biome check drizzle.config.ts package.json src tsconfig.json",
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "17.2.3",
+    "drizzle-orm": "0.45.2",
+    "pg": "8.20.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.15.6",
+    "drizzle-kit": "0.31.10"
+  }
+}

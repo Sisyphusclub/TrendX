@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true,
+    "baseUrl": ".",
+    "paths": {
+      "@trendx/api": [
+        "packages/api/src/index.ts"
+      ],
+      "@trendx/api/*": [
+        "packages/api/src/*"
+      ],
+      "@trendx/database": [
+        "packages/database/src/index.ts"
+      ],
+      "@trendx/database/*": [
+        "packages/database/src/*"
+      ],
+      "@trendx/logs": [
+        "packages/logs/src/index.ts"
+      ],
+      "@trendx/logs/*": [
+        "packages/logs/src/*"
+      ]
+    }
+  }
+}

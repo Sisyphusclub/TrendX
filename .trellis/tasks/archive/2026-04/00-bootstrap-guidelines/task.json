@@ -1,0 +1,35 @@
+{
+  "id": "00-bootstrap-guidelines",
+  "name": "Bootstrap Guidelines",
+  "description": "Fill in project development guidelines for AI agents",
+  "status": "completed",
+  "dev_type": "docs",
+  "priority": "P1",
+  "creator": "Sisyphusclub",
+  "assignee": "Sisyphusclub",
+  "createdAt": "2026-04-07",
+  "completedAt": "2026-04-07",
+  "commit": null,
+  "subtasks": [
+    {
+      "name": "Fill backend guidelines",
+      "status": "completed"
+    },
+    {
+      "name": "Fill frontend guidelines",
+      "status": "completed"
+    },
+    {
+      "name": "Add code examples",
+      "status": "completed"
+    }
+  ],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    ".trellis/spec/backend/",
+    ".trellis/spec/frontend/"
+  ],
+  "notes": "Bootstrap guidelines completed against the current repository state. The repo still has no application code, so examples remain infrastructure-oriented until real backend or frontend files exist.",
+  "meta": {}
+}

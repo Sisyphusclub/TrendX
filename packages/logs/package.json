@@ -1,0 +1,10 @@
+{
+  "name": "@trendx/logs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check package.json src tsconfig.json",
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  }
+}

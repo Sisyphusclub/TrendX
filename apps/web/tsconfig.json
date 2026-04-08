@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "jsx": "preserve",
+    "noEmit": true,
+    "paths": {
+      "@trendx/api": ["../../packages/api/src/index.ts"],
+      "@trendx/api/*": ["../../packages/api/src/*"],
+      "@trendx/database": ["../../packages/database/src/index.ts"],
+      "@trendx/database/*": ["../../packages/database/src/*"],
+      "@trendx/logs": ["../../packages/logs/src/index.ts"],
+      "@trendx/logs/*": ["../../packages/logs/src/*"],
+      "@/*": ["./*"]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "allowJs": true,
+    "incremental": true
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

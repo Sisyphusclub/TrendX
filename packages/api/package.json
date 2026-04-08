@@ -1,0 +1,16 @@
+{
+  "name": "@trendx/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check package.json src tsconfig.json",
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@orpc/server": "1.13.13",
+    "@trendx/logs": "workspace:*",
+    "p-limit": "^7.3.0",
+    "zod": "4.3.6"
+  }
+}
