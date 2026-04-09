@@ -103,3 +103,59 @@ export function formatFeedMode(value: "fallback" | "live"): string {
 
   return "Coinank 实时";
 }
+
+export function formatEntryStageStatus(
+  value: DashboardPair["entryStages"][number]["status"],
+): string {
+  if (value === "TRIGGERED") {
+    return "已触发";
+  }
+
+  if (value === "NEXT") {
+    return "下一档";
+  }
+
+  if (value === "WAITING") {
+    return "等待";
+  }
+
+  return "未解锁";
+}
+
+export function formatHistoryTime(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+
+  const diffMs = Date.now() - date.getTime();
+
+  if (diffMs < 60_000) {
+    return "刚刚";
+  }
+
+  if (diffMs < 60 * 60 * 1000) {
+    return `${Math.max(1, Math.floor(diffMs / 60_000))} 分钟前`;
+  }
+
+  const now = new Date();
+  const isSameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isSameDay) {
+    return date.toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return date.toLocaleString("zh-CN", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+  });
+}

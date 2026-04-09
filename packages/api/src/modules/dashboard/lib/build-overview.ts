@@ -1,5 +1,11 @@
 import { logger } from "@trendx/logs";
 
+import {
+  type BinanceDashboardAccountState,
+  fetchBinanceDashboardAccountState,
+  getBinanceFuturesConfig,
+} from "../../exchange/lib/binance-client";
+import { DASHBOARD_EXECUTION_CONFIG } from "../config";
 import type { DashboardPair, GetDashboardOverviewOutput } from "../types";
 
 import { getDashboardOverviewOutputSchema } from "../types";
@@ -12,15 +18,69 @@ import {
   fetchCoinankPairSnapshot,
   getCoinankDashboardConfig,
 } from "./coinank-client";
-import {
-  buildSeededDashboardOverview,
-  buildSeededDashboardPair,
-} from "./seed-overview";
+import { buildSeededDashboardPair } from "./seed-overview";
 
-const CONFIRMATION_THRESHOLD = 3;
 const DEFAULT_REFERENCE_EQUITY = 100_000;
 const OI_CONFIRMATION_THRESHOLD_PCT = 0.5;
 const PRICE_CONFIRMATION_THRESHOLD_PCT = 0.35;
+const SWING_STRENGTH = 2;
+const ORDER_BLOCK_SEARCH_WINDOW = 36;
+const ORDER_BLOCK_SOURCE_LOOKBACK = 8;
+const SWING_TO_BREAK_MAX_DISTANCE = 14;
+const DISPLACEMENT_LOOKBACK = 5;
+const DISPLACEMENT_BODY_MULTIPLIER = 1.2;
+const DISPLACEMENT_RANGE_MULTIPLIER = 1.1;
+const DISPLACEMENT_CLOSE_LOCATION_THRESHOLD = 0.65;
+const STRUCTURE_BREAK_BUFFER_PCT = 0.08;
+const ORDER_BLOCK_REFINEMENT_INTERVAL = "15m";
+const ORDER_BLOCK_REFINEMENT_LOOKAHEAD = 8;
+const ORDER_BLOCK_REFINEMENT_CONTEXT = 4;
+const DEFAULT_INTERVAL_DURATION_MS = 60 * 60 * 1000;
+const CONFIRMATION_THRESHOLD = DASHBOARD_EXECUTION_CONFIG.confirmationThreshold;
+const EXECUTION_LEVERAGE = DASHBOARD_EXECUTION_CONFIG.leverage;
+const ENTRY_STAGE_BLUEPRINTS = [
+  {
+    allocationPct: DASHBOARD_EXECUTION_CONFIG.stageAllocations[0],
+    plannedPriceKey: "high",
+    zone: "upper",
+  },
+  {
+    allocationPct: DASHBOARD_EXECUTION_CONFIG.stageAllocations[1],
+    plannedPriceKey: "mid",
+    zone: "mid",
+  },
+  {
+    allocationPct: DASHBOARD_EXECUTION_CONFIG.stageAllocations[2],
+    plannedPriceKey: "low",
+    zone: "lower",
+  },
+] as const satisfies ReadonlyArray<{
+  allocationPct: number;
+  plannedPriceKey: keyof DashboardPair["orderBlock"];
+  zone: DashboardPair["entryStages"][number]["zone"];
+}>;
+
+interface OrderBlockCandidate {
+  breakBegin: number;
+  breakIndex: number;
+  isFresh: boolean;
+  orderBlock: DashboardPair["orderBlock"];
+  refinementInterval: string | null;
+  source: "fallback" | "structure";
+  sourceBegin: number;
+  sourceIndex: number;
+  structureLevel: number | null;
+}
+
+interface SwingPoint {
+  index: number;
+  price: number;
+}
+
+interface EntryPlanResult {
+  entryStages: DashboardPair["entryStages"];
+  triggeredStageCount: number;
+}
 
 function calculatePctChange(current: number, previous: number): number {
   if (previous === 0) {
@@ -36,6 +96,22 @@ function roundPrice(symbol: DashboardPair["symbol"], value: number): number {
   }
 
   return Number(value.toFixed(2));
+}
+
+function getAverage(values: number[]): number {
+  if (!values.length) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function getCandleRange(candle: CoinankCandle): number {
+  return Math.max(candle.high - candle.low, 0);
+}
+
+function getCandleBodySize(candle: CoinankCandle): number {
+  return Math.abs(candle.close - candle.open);
 }
 
 function getLatestCandle(candles: CoinankCandle[]): CoinankCandle | null {
@@ -64,6 +140,22 @@ function getRecentCandles(
   count: number,
 ): CoinankCandle[] {
   return candles.slice(Math.max(candles.length - count, 0));
+}
+
+function getHighestHigh(candles: CoinankCandle[], fallback: number): number {
+  if (!candles.length) {
+    return fallback;
+  }
+
+  return Math.max(...candles.map((candle) => candle.high));
+}
+
+function getLowestLow(candles: CoinankCandle[], fallback: number): number {
+  if (!candles.length) {
+    return fallback;
+  }
+
+  return Math.min(...candles.map((candle) => candle.low));
 }
 
 function deriveTrendDirection(
@@ -128,14 +220,203 @@ function formatSignedPct(value: number): string {
   return `${sign}${value.toFixed(2)}%`;
 }
 
-function selectOrderBlock(
+function getIntervalDurationMs(interval: string): number {
+  const normalized = interval.trim().toLowerCase();
+  const match = normalized.match(/^(\d+)(m|h|d)$/);
+
+  if (!match) {
+    return DEFAULT_INTERVAL_DURATION_MS;
+  }
+
+  const [, rawValue, rawUnit] = match;
+  const value = Number(rawValue);
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return DEFAULT_INTERVAL_DURATION_MS;
+  }
+
+  if (rawUnit === "m") {
+    return value * 60 * 1000;
+  }
+
+  if (rawUnit === "h") {
+    return value * 60 * 60 * 1000;
+  }
+
+  return value * 24 * 60 * 60 * 1000;
+}
+
+function isSwingHigh(candles: CoinankCandle[], index: number): boolean {
+  const center = candles[index];
+
+  if (!center) {
+    return false;
+  }
+
+  for (let offset = 1; offset <= SWING_STRENGTH; offset += 1) {
+    const left = candles[index - offset];
+    const right = candles[index + offset];
+
+    if (!left || !right) {
+      return false;
+    }
+
+    if (center.high <= left.high || center.high < right.high) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isSwingLow(candles: CoinankCandle[], index: number): boolean {
+  const center = candles[index];
+
+  if (!center) {
+    return false;
+  }
+
+  for (let offset = 1; offset <= SWING_STRENGTH; offset += 1) {
+    const left = candles[index - offset];
+    const right = candles[index + offset];
+
+    if (!left || !right) {
+      return false;
+    }
+
+    if (center.low >= left.low || center.low > right.low) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function findPreviousSwingPoint(
+  candles: CoinankCandle[],
+  fromIndex: number,
+  type: "high" | "low",
+): SwingPoint | null {
+  const upperBound = Math.min(fromIndex, candles.length - 1 - SWING_STRENGTH);
+
+  for (let index = upperBound; index >= SWING_STRENGTH; index -= 1) {
+    const candle = candles[index];
+
+    if (!candle) {
+      continue;
+    }
+
+    if (type === "high" && isSwingHigh(candles, index)) {
+      return {
+        index,
+        price: candle.high,
+      };
+    }
+
+    if (type === "low" && isSwingLow(candles, index)) {
+      return {
+        index,
+        price: candle.low,
+      };
+    }
+  }
+
+  return null;
+}
+
+function breaksStructure(
+  candle: CoinankCandle,
+  structureLevel: number,
+  trendDirection: DashboardPair["trendDirection"],
+): boolean {
+  const buffer = structureLevel * (STRUCTURE_BREAK_BUFFER_PCT / 100);
+
+  if (trendDirection === "BULLISH") {
+    return candle.close > structureLevel + buffer;
+  }
+
+  if (trendDirection === "BEARISH") {
+    return candle.close < structureLevel - buffer;
+  }
+
+  return false;
+}
+
+function hasDisplacement(
+  candles: CoinankCandle[],
+  index: number,
+  trendDirection: DashboardPair["trendDirection"],
+): boolean {
+  const candle = candles[index];
+
+  if (!candle) {
+    return false;
+  }
+
+  const context = candles.slice(
+    Math.max(index - DISPLACEMENT_LOOKBACK, 0),
+    index,
+  );
+
+  if (!context.length) {
+    return false;
+  }
+
+  const averageBody = getAverage(context.map(getCandleBodySize));
+  const averageRange = getAverage(context.map(getCandleRange));
+  const body = getCandleBodySize(candle);
+  const range = getCandleRange(candle);
+  const closeLocation = range === 0 ? 0.5 : (candle.close - candle.low) / range;
+
+  if (trendDirection === "BULLISH") {
+    return (
+      candle.close > candle.open &&
+      body >= averageBody * DISPLACEMENT_BODY_MULTIPLIER &&
+      range >= averageRange * DISPLACEMENT_RANGE_MULTIPLIER &&
+      closeLocation >= DISPLACEMENT_CLOSE_LOCATION_THRESHOLD
+    );
+  }
+
+  if (trendDirection === "BEARISH") {
+    return (
+      candle.close < candle.open &&
+      body >= averageBody * DISPLACEMENT_BODY_MULTIPLIER &&
+      range >= averageRange * DISPLACEMENT_RANGE_MULTIPLIER &&
+      closeLocation <= 1 - DISPLACEMENT_CLOSE_LOCATION_THRESHOLD
+    );
+  }
+
+  return false;
+}
+
+function buildOrderBlockFromCandle(
+  symbol: DashboardPair["symbol"],
+  candle: CoinankCandle,
+  trendDirection: DashboardPair["trendDirection"],
+): DashboardPair["orderBlock"] {
+  const bodyHigh = Math.max(candle.open, candle.close);
+  const bodyLow = Math.min(candle.open, candle.close);
+  const high =
+    trendDirection === "BEARISH" ? candle.high : Math.max(bodyHigh, bodyLow);
+  const low =
+    trendDirection === "BULLISH" ? candle.low : Math.min(bodyHigh, bodyLow);
+  const normalizedHigh = Math.max(high, low);
+  const normalizedLow = Math.min(high, low);
+
+  return {
+    high: roundPrice(symbol, normalizedHigh),
+    low: roundPrice(symbol, normalizedLow),
+    mid: roundPrice(symbol, (normalizedHigh + normalizedLow) / 2),
+  };
+}
+
+function buildFallbackOrderBlockCandidate(
   symbol: DashboardPair["symbol"],
   candles: CoinankCandle[],
   trendDirection: DashboardPair["trendDirection"],
-): DashboardPair["orderBlock"] {
+): OrderBlockCandidate {
   const completedCandles = getCompletedCandles(candles);
   const searchWindow = getRecentCandles(completedCandles, 12).slice().reverse();
-
   const selectedCandle = searchWindow.find((candle) => {
     if (trendDirection === "BULLISH") {
       return candle.close < candle.open;
@@ -147,39 +428,367 @@ function selectOrderBlock(
 
     return false;
   });
-
   const fallbackCandle =
     selectedCandle ??
     getLatestCandle(completedCandles) ??
     getLatestCandle(candles);
 
   if (!fallbackCandle) {
+    const emptyOrderBlock = buildOrderBlockFromCandle(
+      symbol,
+      {
+        begin: 0,
+        close: 0,
+        high: 0,
+        low: 0,
+        open: 0,
+      },
+      "BULLISH",
+    );
+
     return {
-      high: roundPrice(symbol, 0),
-      low: roundPrice(symbol, 0),
-      mid: roundPrice(symbol, 0),
+      breakBegin: 0,
+      breakIndex: 0,
+      isFresh: false,
+      orderBlock: emptyOrderBlock,
+      refinementInterval: null,
+      source: "fallback",
+      sourceBegin: 0,
+      sourceIndex: 0,
+      structureLevel: null,
     };
   }
 
-  const bodyHigh = Math.max(fallbackCandle.open, fallbackCandle.close);
-  const bodyLow = Math.min(fallbackCandle.open, fallbackCandle.close);
-  const high =
-    trendDirection === "BEARISH"
-      ? fallbackCandle.high
-      : Math.max(bodyHigh, bodyLow);
-  const low =
-    trendDirection === "BULLISH"
-      ? fallbackCandle.low
-      : Math.min(bodyHigh, bodyLow);
-  const normalizedHigh = Math.max(high, low);
-  const normalizedLow = Math.min(high, low);
-  const mid = (normalizedHigh + normalizedLow) / 2;
+  const sourceIndex = completedCandles.indexOf(fallbackCandle);
 
   return {
-    high: roundPrice(symbol, normalizedHigh),
-    low: roundPrice(symbol, normalizedLow),
-    mid: roundPrice(symbol, mid),
+    breakBegin: fallbackCandle.begin,
+    breakIndex: Math.max(sourceIndex, 0),
+    isFresh: false,
+    orderBlock: buildOrderBlockFromCandle(
+      symbol,
+      fallbackCandle,
+      trendDirection === "NEUTRAL" ? "BULLISH" : trendDirection,
+    ),
+    refinementInterval: null,
+    source: "fallback",
+    sourceBegin: fallbackCandle.begin,
+    sourceIndex: Math.max(sourceIndex, 0),
+    structureLevel: null,
   };
+}
+
+function findOrderBlockSourceIndex(
+  candles: CoinankCandle[],
+  breakIndex: number,
+  trendDirection: DashboardPair["trendDirection"],
+  minimumIndex: number,
+): number | null {
+  const lowerBound = Math.max(
+    minimumIndex,
+    breakIndex - ORDER_BLOCK_SOURCE_LOOKBACK,
+  );
+
+  for (let index = breakIndex - 1; index >= lowerBound; index -= 1) {
+    const candle = candles[index];
+
+    if (!candle) {
+      continue;
+    }
+
+    if (trendDirection === "BULLISH" && candle.close < candle.open) {
+      return index;
+    }
+
+    if (trendDirection === "BEARISH" && candle.close > candle.open) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+function wasOrderBlockRetested(
+  candles: CoinankCandle[],
+  breakIndex: number,
+  orderBlock: DashboardPair["orderBlock"],
+): boolean {
+  for (let index = breakIndex + 1; index < candles.length; index += 1) {
+    const candle = candles[index];
+
+    if (!candle) {
+      continue;
+    }
+
+    if (candle.low <= orderBlock.high && candle.high >= orderBlock.low) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function selectStructuredOrderBlock(
+  symbol: DashboardPair["symbol"],
+  candles: CoinankCandle[],
+  trendDirection: DashboardPair["trendDirection"],
+): OrderBlockCandidate | null {
+  const completedCandles = getCompletedCandles(candles);
+
+  if (
+    trendDirection === "NEUTRAL" ||
+    completedCandles.length < SWING_STRENGTH * 2 + DISPLACEMENT_LOOKBACK + 2
+  ) {
+    return null;
+  }
+
+  const earliestBreakIndex = Math.max(
+    SWING_STRENGTH + DISPLACEMENT_LOOKBACK,
+    completedCandles.length - ORDER_BLOCK_SEARCH_WINDOW,
+  );
+  const latestBreakIndex = completedCandles.length - 1 - SWING_STRENGTH;
+
+  for (let index = latestBreakIndex; index >= earliestBreakIndex; index -= 1) {
+    const breakCandle = completedCandles[index];
+
+    if (!breakCandle) {
+      continue;
+    }
+
+    const swingPoint = findPreviousSwingPoint(
+      completedCandles,
+      index - 1,
+      trendDirection === "BULLISH" ? "high" : "low",
+    );
+
+    if (!swingPoint || index - swingPoint.index > SWING_TO_BREAK_MAX_DISTANCE) {
+      continue;
+    }
+
+    if (
+      !breaksStructure(breakCandle, swingPoint.price, trendDirection) ||
+      !hasDisplacement(completedCandles, index, trendDirection)
+    ) {
+      continue;
+    }
+
+    const sourceIndex = findOrderBlockSourceIndex(
+      completedCandles,
+      index,
+      trendDirection,
+      swingPoint.index,
+    );
+
+    if (sourceIndex === null) {
+      continue;
+    }
+
+    const sourceCandle = completedCandles[sourceIndex];
+
+    if (!sourceCandle) {
+      continue;
+    }
+
+    const orderBlock = buildOrderBlockFromCandle(
+      symbol,
+      sourceCandle,
+      trendDirection,
+    );
+
+    return {
+      breakBegin: breakCandle.begin,
+      breakIndex: index,
+      isFresh: !wasOrderBlockRetested(completedCandles, index, orderBlock),
+      orderBlock,
+      refinementInterval: null,
+      source: "structure",
+      sourceBegin: sourceCandle.begin,
+      sourceIndex,
+      structureLevel: swingPoint.price,
+    };
+  }
+
+  return null;
+}
+
+function selectOrderBlockCandidate(
+  symbol: DashboardPair["symbol"],
+  candles: CoinankCandle[],
+  trendDirection: DashboardPair["trendDirection"],
+): OrderBlockCandidate {
+  return (
+    selectStructuredOrderBlock(symbol, candles, trendDirection) ??
+    buildFallbackOrderBlockCandidate(symbol, candles, trendDirection)
+  );
+}
+
+function overlapsOrderBlock(
+  orderBlock: DashboardPair["orderBlock"],
+  candle: CoinankCandle,
+): boolean {
+  return candle.low <= orderBlock.high && candle.high >= orderBlock.low;
+}
+
+function isOppositeOrderBlockCandle(
+  candle: CoinankCandle,
+  trendDirection: DashboardPair["trendDirection"],
+): boolean {
+  if (trendDirection === "BULLISH") {
+    return candle.close < candle.open;
+  }
+
+  if (trendDirection === "BEARISH") {
+    return candle.close > candle.open;
+  }
+
+  return false;
+}
+
+function intersectOrderBlocks(
+  symbol: DashboardPair["symbol"],
+  baseOrderBlock: DashboardPair["orderBlock"],
+  refinedOrderBlock: DashboardPair["orderBlock"],
+): DashboardPair["orderBlock"] | null {
+  const high = Math.min(baseOrderBlock.high, refinedOrderBlock.high);
+  const low = Math.max(baseOrderBlock.low, refinedOrderBlock.low);
+
+  if (high <= low) {
+    return null;
+  }
+
+  return {
+    high: roundPrice(symbol, high),
+    low: roundPrice(symbol, low),
+    mid: roundPrice(symbol, (high + low) / 2),
+  };
+}
+
+function findLowerTimeframeBreakIndex(
+  candles: CoinankCandle[],
+  sourceIndex: number,
+  trendDirection: DashboardPair["trendDirection"],
+  windowEnd: number,
+): number | null {
+  const context = candles.slice(
+    Math.max(sourceIndex - ORDER_BLOCK_REFINEMENT_CONTEXT, 0),
+    sourceIndex,
+  );
+
+  if (!context.length) {
+    return null;
+  }
+
+  const structureLevel =
+    trendDirection === "BULLISH"
+      ? getHighestHigh(context, candles[sourceIndex]?.high ?? 0)
+      : getLowestLow(context, candles[sourceIndex]?.low ?? 0);
+
+  for (
+    let index = sourceIndex + 1;
+    index <
+    Math.min(
+      candles.length,
+      sourceIndex + 1 + ORDER_BLOCK_REFINEMENT_LOOKAHEAD,
+    );
+    index += 1
+  ) {
+    const candle = candles[index];
+
+    if (!candle || candle.begin >= windowEnd) {
+      continue;
+    }
+
+    if (
+      breaksStructure(candle, structureLevel, trendDirection) &&
+      hasDisplacement(candles, index, trendDirection)
+    ) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+function refineOrderBlockCandidate(
+  symbol: DashboardPair["symbol"],
+  lowerTimeframeCandles: CoinankCandle[],
+  trendDirection: DashboardPair["trendDirection"],
+  candidate: OrderBlockCandidate,
+  higherIntervalDurationMs: number,
+): OrderBlockCandidate {
+  if (candidate.source !== "structure") {
+    return candidate;
+  }
+
+  const completedCandles = getCompletedCandles(lowerTimeframeCandles);
+
+  if (!completedCandles.length) {
+    return candidate;
+  }
+
+  const refinementWindowEnd = candidate.breakBegin + higherIntervalDurationMs;
+
+  for (let index = completedCandles.length - 1; index >= 0; index -= 1) {
+    const candle = completedCandles[index];
+
+    if (!candle) {
+      continue;
+    }
+
+    if (
+      candle.begin < candidate.sourceBegin ||
+      candle.begin >= refinementWindowEnd ||
+      !isOppositeOrderBlockCandle(candle, trendDirection) ||
+      !overlapsOrderBlock(candidate.orderBlock, candle)
+    ) {
+      continue;
+    }
+
+    const breakIndex = findLowerTimeframeBreakIndex(
+      completedCandles,
+      index,
+      trendDirection,
+      refinementWindowEnd,
+    );
+
+    if (breakIndex === null) {
+      continue;
+    }
+
+    const refinedOrderBlock = buildOrderBlockFromCandle(
+      symbol,
+      candle,
+      trendDirection,
+    );
+    const intersectedOrderBlock = intersectOrderBlocks(
+      symbol,
+      candidate.orderBlock,
+      refinedOrderBlock,
+    );
+
+    if (!intersectedOrderBlock) {
+      continue;
+    }
+
+    return {
+      ...candidate,
+      breakBegin: completedCandles[breakIndex]?.begin ?? candidate.breakBegin,
+      breakIndex,
+      isFresh:
+        candidate.isFresh &&
+        !wasOrderBlockRetested(
+          completedCandles,
+          breakIndex,
+          intersectedOrderBlock,
+        ),
+      orderBlock: intersectedOrderBlock,
+      refinementInterval: ORDER_BLOCK_REFINEMENT_INTERVAL,
+      sourceBegin: candle.begin,
+      sourceIndex: index,
+    };
+  }
+
+  return candidate;
 }
 
 function isFundingTradable(
@@ -228,26 +837,103 @@ function matchesLiquidationSweep(
   return false;
 }
 
+function getOrderBlockTolerance(
+  orderBlock: DashboardPair["orderBlock"],
+  latestPrice: number,
+): number {
+  const orderBlockHeight = Math.max(orderBlock.high - orderBlock.low, 0);
+
+  return Math.max(orderBlockHeight * 0.12, latestPrice * 0.0005);
+}
+
 function isInOrderBlockRange(
   orderBlock: DashboardPair["orderBlock"],
-  trendDirection: DashboardPair["trendDirection"],
   latestPrice: number,
 ): boolean {
-  if (trendDirection === "BULLISH") {
-    return (
-      latestPrice >= orderBlock.low * 0.995 &&
-      latestPrice <= orderBlock.high * 1.003
-    );
+  const tolerance = getOrderBlockTolerance(orderBlock, latestPrice);
+
+  return (
+    latestPrice >= orderBlock.low - tolerance &&
+    latestPrice <= orderBlock.high + tolerance
+  );
+}
+
+function getEntryStageTolerance(
+  orderBlock: DashboardPair["orderBlock"],
+  latestPrice: number,
+): number {
+  const orderBlockHeight = Math.max(orderBlock.high - orderBlock.low, 0);
+
+  return Math.max(orderBlockHeight * 0.03, latestPrice * 0.0003);
+}
+
+function getStageTraversalOrder(
+  trendDirection: DashboardPair["trendDirection"],
+): DashboardPair["entryStages"][number]["zone"][] {
+  if (trendDirection === "BEARISH") {
+    return ["lower", "mid", "upper"];
   }
+
+  return ["upper", "mid", "lower"];
+}
+
+function hasStageBeenReached(
+  plannedPrice: number,
+  latestPrice: number,
+  tolerance: number,
+  trendDirection: DashboardPair["trendDirection"],
+): boolean {
+  if (trendDirection === "BEARISH") {
+    return latestPrice >= plannedPrice - tolerance;
+  }
+
+  return latestPrice <= plannedPrice + tolerance;
+}
+
+function getDirectionalSwingLevels(
+  candles: CoinankCandle[],
+  latestPrice: number,
+  trendDirection: DashboardPair["trendDirection"],
+): number[] {
+  const levels: number[] = [];
+
+  for (
+    let index = SWING_STRENGTH;
+    index < candles.length - SWING_STRENGTH;
+    index += 1
+  ) {
+    const candle = candles[index];
+
+    if (!candle) {
+      continue;
+    }
+
+    if (
+      trendDirection === "BULLISH" &&
+      isSwingHigh(candles, index) &&
+      candle.high > latestPrice
+    ) {
+      levels.push(candle.high);
+    }
+
+    if (
+      trendDirection === "BEARISH" &&
+      isSwingLow(candles, index) &&
+      candle.low < latestPrice
+    ) {
+      levels.push(candle.low);
+    }
+  }
+
+  const uniqueLevels = Array.from(
+    new Set(levels.map((level) => Number(level.toFixed(8)))),
+  );
 
   if (trendDirection === "BEARISH") {
-    return (
-      latestPrice >= orderBlock.low * 0.997 &&
-      latestPrice <= orderBlock.high * 1.005
-    );
+    return uniqueLevels.sort((left, right) => right - left);
   }
 
-  return false;
+  return uniqueLevels.sort((left, right) => left - right);
 }
 
 function buildProtectionTargets(
@@ -257,54 +943,193 @@ function buildProtectionTargets(
   trendDirection: DashboardPair["trendDirection"],
   latestPrice: number,
 ): Pick<DashboardPair, "stopLoss" | "takeProfitOne" | "takeProfitTwo"> {
-  const shortWindow = getRecentCandles(candles, 12);
-  const longWindow = getRecentCandles(candles, 24);
-  const highestRecentPrice = Math.max(
-    ...shortWindow.map((candle) => candle.high),
+  const completedCandles = getCompletedCandles(candles);
+  const structureCandles = completedCandles.length ? completedCandles : candles;
+  const shortWindow = getRecentCandles(structureCandles, 12);
+  const longWindow = getRecentCandles(structureCandles, 24);
+  const highestRecentPrice = getHighestHigh(shortWindow, latestPrice);
+  const lowestRecentPrice = getLowestLow(shortWindow, latestPrice);
+  const highestExtendedPrice = getHighestHigh(longWindow, highestRecentPrice);
+  const lowestExtendedPrice = getLowestLow(longWindow, lowestRecentPrice);
+  const structuralTargets = getDirectionalSwingLevels(
+    longWindow,
+    latestPrice,
+    trendDirection,
   );
-  const lowestRecentPrice = Math.min(
-    ...shortWindow.map((candle) => candle.low),
+  const averageRange = getAverage(shortWindow.map(getCandleRange));
+  const orderBlockHeight = Math.max(
+    orderBlock.high - orderBlock.low,
+    averageRange * 0.35,
+    latestPrice * 0.0008,
   );
-  const highestExtendedPrice = Math.max(
-    ...longWindow.map((candle) => candle.high),
-  );
-  const lowestExtendedPrice = Math.min(
-    ...longWindow.map((candle) => candle.low),
+  const stopBuffer = Math.max(
+    orderBlockHeight * 0.12,
+    averageRange * 0.18,
+    latestPrice * 0.0005,
   );
 
   if (trendDirection === "BEARISH") {
-    const stopLoss = roundPrice(symbol, orderBlock.high * 1.002);
-    const takeProfitOne = roundPrice(
-      symbol,
-      Math.min(lowestRecentPrice, latestPrice * 0.99),
-    );
-    const takeProfitTwo = roundPrice(
-      symbol,
-      Math.min(lowestExtendedPrice, takeProfitOne * 0.99),
-    );
+    const stopLoss = roundPrice(symbol, orderBlock.high + stopBuffer);
+    const takeProfitOneRaw =
+      structuralTargets[0] ??
+      Math.min(lowestRecentPrice, latestPrice - orderBlockHeight * 1.6);
+    const takeProfitTwoRaw =
+      structuralTargets[1] ??
+      Math.min(lowestExtendedPrice, takeProfitOneRaw - orderBlockHeight);
 
     return {
       stopLoss,
-      takeProfitOne,
-      takeProfitTwo,
+      takeProfitOne: roundPrice(symbol, takeProfitOneRaw),
+      takeProfitTwo: roundPrice(
+        symbol,
+        Math.min(takeProfitTwoRaw, takeProfitOneRaw - orderBlockHeight * 0.8),
+      ),
     };
   }
 
-  const stopLoss = roundPrice(symbol, orderBlock.low * 0.998);
-  const takeProfitOne = roundPrice(
-    symbol,
-    Math.max(highestRecentPrice, latestPrice * 1.01),
-  );
-  const takeProfitTwo = roundPrice(
-    symbol,
-    Math.max(highestExtendedPrice, takeProfitOne * 1.01),
-  );
+  const stopLoss = roundPrice(symbol, orderBlock.low - stopBuffer);
+  const takeProfitOneRaw =
+    structuralTargets[0] ??
+    Math.max(highestRecentPrice, latestPrice + orderBlockHeight * 1.6);
+  const takeProfitTwoRaw =
+    structuralTargets[1] ??
+    Math.max(highestExtendedPrice, takeProfitOneRaw + orderBlockHeight);
 
   return {
     stopLoss,
-    takeProfitOne,
-    takeProfitTwo,
+    takeProfitOne: roundPrice(symbol, takeProfitOneRaw),
+    takeProfitTwo: roundPrice(
+      symbol,
+      Math.max(takeProfitTwoRaw, takeProfitOneRaw + orderBlockHeight * 0.8),
+    ),
   };
+}
+
+function buildEntryPlan(
+  orderBlock: DashboardPair["orderBlock"],
+  trendDirection: DashboardPair["trendDirection"],
+  latestPrice: number,
+  entryConditionsMet: boolean,
+): EntryPlanResult {
+  const entryStages: DashboardPair["entryStages"] = ENTRY_STAGE_BLUEPRINTS.map(
+    ({ allocationPct, plannedPriceKey, zone }) => ({
+      allocationPct,
+      plannedPrice: orderBlock[plannedPriceKey],
+      status: "WAITING",
+      zone,
+    }),
+  );
+
+  const stageOrder = getStageTraversalOrder(trendDirection);
+  const stageTolerance = getEntryStageTolerance(orderBlock, latestPrice);
+  const stageLookup = new Map(
+    entryStages.map((stage) => [stage.zone, stage] as const),
+  );
+  let priceReachedStageCount = 0;
+
+  for (const zone of stageOrder) {
+    const stage = stageLookup.get(zone);
+
+    if (
+      stage &&
+      hasStageBeenReached(
+        stage.plannedPrice,
+        latestPrice,
+        stageTolerance,
+        trendDirection,
+      )
+    ) {
+      priceReachedStageCount += 1;
+      continue;
+    }
+
+    break;
+  }
+
+  const triggeredStageCount = entryConditionsMet ? priceReachedStageCount : 0;
+
+  if (!entryConditionsMet) {
+    return {
+      entryStages: entryStages.map((stage) => ({
+        ...stage,
+        status: "LOCKED",
+      })),
+      triggeredStageCount,
+    };
+  }
+
+  const nextZone = stageOrder[triggeredStageCount];
+
+  return {
+    entryStages: entryStages.map((stage) => ({
+      ...stage,
+      status:
+        stageOrder.indexOf(stage.zone) < triggeredStageCount
+          ? "TRIGGERED"
+          : stage.zone === nextZone
+            ? "NEXT"
+            : "WAITING",
+    })),
+    triggeredStageCount,
+  };
+}
+
+function buildRiskLabel(params: {
+  action: DashboardPair["action"];
+  hasConfirmedStructure: boolean;
+  inOrderBlockRange: boolean;
+  isFresh: boolean;
+  trendDirection: DashboardPair["trendDirection"];
+}): string {
+  if (params.trendDirection === "NEUTRAL") {
+    return "No directional edge";
+  }
+
+  if (!params.hasConfirmedStructure) {
+    return "Trend valid, structure not confirmed";
+  }
+
+  if (!params.isFresh) {
+    return "Confirmed block already mitigated";
+  }
+
+  if (params.action === "ENTRY") {
+    return params.trendDirection === "BULLISH"
+      ? "Aligned long continuation"
+      : "Aligned short continuation";
+  }
+
+  if (params.inOrderBlockRange) {
+    return "Low conviction at confirmed zone";
+  }
+
+  return "Waiting for confirmed zone";
+}
+
+function buildRationale(params: {
+  confirmationCount: number;
+  hasConfirmedStructure: boolean;
+  inOrderBlockRange: boolean;
+  isFresh: boolean;
+  oiChangePct: number;
+  orderBlockCandidate: OrderBlockCandidate;
+  priceChangePct: number;
+  symbol: DashboardPair["symbol"];
+  trendDirection: DashboardPair["trendDirection"];
+}): string {
+  if (params.trendDirection === "NEUTRAL") {
+    return `${params.symbol} is not showing the required OI-price expansion on the 1h feed, so TrendX keeps the desk flat and waits.`;
+  }
+
+  const structureSentence = params.hasConfirmedStructure
+    ? `A confirmed 1h ${params.trendDirection === "BULLISH" ? "bullish" : "bearish"} order block was anchored to the last ${params.trendDirection === "BULLISH" ? "down" : "up"} candle before a BOS close through ${params.orderBlockCandidate.structureLevel?.toFixed(2) ?? "structure"}. The block is ${params.isFresh ? "fresh" : "already mitigated"}.`
+    : "No structure-confirmed 1h order block was found, so the current zone remains reference-only.";
+  const refinementSentence =
+    params.orderBlockCandidate.refinementInterval === null
+      ? ""
+      : ` The execution zone was refined on ${params.orderBlockCandidate.refinementInterval}.`;
+
+  return `${params.symbol} shows ${params.trendDirection.toLowerCase()} OI-price alignment with price ${formatSignedPct(params.priceChangePct)} and open interest ${formatSignedPct(params.oiChangePct)} over the recent 12h. ${params.confirmationCount}/6 live Coinank checks are aligned. ${structureSentence}${refinementSentence} Price is ${params.inOrderBlockRange ? "inside" : "outside"} the tracked zone.`;
 }
 
 async function buildLiveDashboardPair(
@@ -312,6 +1137,8 @@ async function buildLiveDashboardPair(
   snapshot: CoinankPairSnapshot,
 ): Promise<DashboardPair> {
   const latestPriceCandle = getLatestCandle(snapshot.priceCandles);
+  const latestExecutionPriceCandle =
+    getLatestCandle(snapshot.refinedPriceCandles) ?? latestPriceCandle;
   const latestOpenInterestCandle = getLatestCandle(
     snapshot.openInterestCandles,
   );
@@ -321,6 +1148,7 @@ async function buildLiveDashboardPair(
 
   if (
     !latestPriceCandle ||
+    !latestExecutionPriceCandle ||
     !latestOpenInterestCandle ||
     !latestFundingCandle ||
     !priceAnchor ||
@@ -331,8 +1159,12 @@ async function buildLiveDashboardPair(
     );
   }
 
-  const latestPrice = latestPriceCandle.close;
-  const priceChangePct = calculatePctChange(latestPrice, priceAnchor.close);
+  const latestTrendPrice = latestPriceCandle.close;
+  const latestExecutionPrice = latestExecutionPriceCandle.close;
+  const priceChangePct = calculatePctChange(
+    latestTrendPrice,
+    priceAnchor.close,
+  );
   const oiChangePct = calculatePctChange(
     latestOpenInterestCandle.close,
     openInterestAnchor.close,
@@ -351,11 +1183,20 @@ async function buildLiveDashboardPair(
         100;
   const cvdBiasPct =
     (await fetchCoinankCvdBiasPct(config, snapshot.symbol)) ?? takerBiasPct;
-  const orderBlock = selectOrderBlock(
+  const higherTimeframeOrderBlockCandidate = selectOrderBlockCandidate(
     snapshot.symbol,
     snapshot.priceCandles,
     trendDirection,
   );
+  const orderBlockCandidate = refineOrderBlockCandidate(
+    snapshot.symbol,
+    snapshot.refinedPriceCandles,
+    trendDirection,
+    higherTimeframeOrderBlockCandidate,
+    getIntervalDurationMs(config.interval),
+  );
+  const orderBlock = orderBlockCandidate.orderBlock;
+  const hasConfirmedStructure = orderBlockCandidate.source === "structure";
   const oiMatched =
     trendDirection !== "NEUTRAL" && oiChangePct > OI_CONFIRMATION_THRESHOLD_PCT;
   const cvdMatched =
@@ -384,27 +1225,33 @@ async function buildLiveDashboardPair(
     aggressiveFlowMatched,
   ];
   const confirmationCount = confirmationMatches.filter(Boolean).length;
-  const inOrderBlockRange = isInOrderBlockRange(
+  const entryConditionsMet =
+    hasConfirmedStructure &&
+    orderBlockCandidate.isFresh &&
+    confirmationCount >= CONFIRMATION_THRESHOLD;
+  const entryPlan = buildEntryPlan(
     orderBlock,
     trendDirection,
-    latestPrice,
+    latestExecutionPrice,
+    entryConditionsMet,
   );
+  const inOrderBlockRange =
+    entryPlan.triggeredStageCount > 0 &&
+    isInOrderBlockRange(orderBlock, latestExecutionPrice);
   const action: DashboardPair["action"] =
     trendDirection !== "NEUTRAL" &&
-    inOrderBlockRange &&
-    confirmationCount >= CONFIRMATION_THRESHOLD
+    entryConditionsMet &&
+    entryPlan.triggeredStageCount > 0 &&
+    inOrderBlockRange
       ? "ENTRY"
       : "WAIT";
-  const riskLabel =
-    trendDirection === "NEUTRAL"
-      ? "No directional edge"
-      : action === "ENTRY"
-        ? trendDirection === "BULLISH"
-          ? "Aligned long continuation"
-          : "Aligned short continuation"
-        : inOrderBlockRange
-          ? "Low conviction at the zone"
-          : "Trend valid, waiting for zone";
+  const riskLabel = buildRiskLabel({
+    action,
+    hasConfirmedStructure,
+    inOrderBlockRange,
+    isFresh: orderBlockCandidate.isFresh,
+    trendDirection,
+  });
   const executionStatus: DashboardPair["executionStatus"] =
     action === "ENTRY" ? "ARMED" : "PENDING";
   const protectionTargets = buildProtectionTargets(
@@ -412,12 +1259,19 @@ async function buildLiveDashboardPair(
     snapshot.priceCandles,
     orderBlock,
     trendDirection,
-    latestPrice,
+    latestExecutionPrice,
   );
-  const rationale =
-    trendDirection === "NEUTRAL"
-      ? `${snapshot.symbol} is not showing the required OI-price expansion on the 1h feed, so TrendX keeps the desk flat and waits.`
-      : `${snapshot.symbol} shows ${trendDirection.toLowerCase()} OI-price alignment with price ${formatSignedPct(priceChangePct)} and open interest ${formatSignedPct(oiChangePct)} over the recent 12h. ${confirmationCount}/6 live Coinank checks are aligned, and price is ${inOrderBlockRange ? "inside" : "outside"} the preferred 1h order block.`;
+  const rationale = buildRationale({
+    confirmationCount,
+    hasConfirmedStructure,
+    inOrderBlockRange,
+    isFresh: orderBlockCandidate.isFresh,
+    oiChangePct,
+    orderBlockCandidate,
+    priceChangePct,
+    symbol: snapshot.symbol,
+    trendDirection,
+  });
 
   return {
     action,
@@ -425,33 +1279,17 @@ async function buildLiveDashboardPair(
     confirmationThreshold: CONFIRMATION_THRESHOLD,
     checklist: buildChecklist(confirmationMatches),
     currentPosition: {
-      leverage: 20,
+      leverage: EXECUTION_LEVERAGE,
       pnl: 0,
       side: "FLAT",
       sizeUsd: 0,
     },
     cvdBiasPct: Number(cvdBiasPct.toFixed(2)),
-    entryStages: [
-      {
-        allocationPct: 30,
-        plannedPrice: orderBlock.high,
-        zone: "upper",
-      },
-      {
-        allocationPct: 40,
-        plannedPrice: orderBlock.mid,
-        zone: "mid",
-      },
-      {
-        allocationPct: 30,
-        plannedPrice: orderBlock.low,
-        zone: "lower",
-      },
-    ],
+    entryStages: entryPlan.entryStages,
     executionStatus,
     fundingRate: Number(fundingRatePct.toFixed(4)),
-    lastPrice: roundPrice(snapshot.symbol, latestPrice),
-    markPrice: roundPrice(snapshot.symbol, latestPrice),
+    lastPrice: roundPrice(snapshot.symbol, latestExecutionPrice),
+    markPrice: roundPrice(snapshot.symbol, latestExecutionPrice),
     openInterestDeltaPct: Number(oiChangePct.toFixed(2)),
     orderBlock,
     rationale,
@@ -475,61 +1313,137 @@ function buildReferenceAccountRisk() {
   };
 }
 
-export async function buildDashboardOverview(): Promise<GetDashboardOverviewOutput> {
-  const config = getCoinankDashboardConfig();
+function applyExchangePositionToPair(
+  pair: DashboardPair,
+  accountState: BinanceDashboardAccountState | null,
+): DashboardPair {
+  if (!accountState) {
+    return pair;
+  }
 
-  if (!config) {
-    logger.warn("Coinank API key missing; serving seeded dashboard overview.");
-    return buildSeededDashboardOverview(
-      "Coinank API key missing. Serving seeded dashboard overview.",
+  const exchangePosition = accountState.positionsBySymbol[pair.symbol];
+
+  if (!exchangePosition) {
+    return {
+      ...pair,
+      currentPosition: {
+        leverage: EXECUTION_LEVERAGE,
+        pnl: 0,
+        side: "FLAT",
+        sizeUsd: 0,
+      },
+    };
+  }
+
+  return {
+    ...pair,
+    currentPosition: {
+      leverage: EXECUTION_LEVERAGE,
+      pnl: exchangePosition.pnl,
+      side: exchangePosition.side,
+      sizeUsd: exchangePosition.sizeUsd,
+    },
+    executionStatus:
+      exchangePosition.side === "FLAT" ? pair.executionStatus : "OPEN",
+  };
+}
+
+export async function buildDashboardOverview(): Promise<GetDashboardOverviewOutput> {
+  const coinankConfig = getCoinankDashboardConfig();
+  const binanceConfig = getBinanceFuturesConfig();
+  const accountStateResult = binanceConfig
+    ? await Promise.allSettled([
+        fetchBinanceDashboardAccountState(binanceConfig),
+      ])
+    : null;
+  const accountState =
+    accountStateResult?.[0]?.status === "fulfilled"
+      ? accountStateResult[0].value
+      : null;
+  const reasons: string[] = [];
+
+  if (accountStateResult?.[0]?.status === "rejected") {
+    logger.warn(
+      "Binance account sync failed; falling back to reference risk.",
+      {
+        error:
+          accountStateResult[0].reason instanceof Error
+            ? accountStateResult[0].reason.message
+            : String(accountStateResult[0].reason),
+        mode: binanceConfig?.mode ?? "unknown",
+      },
+    );
+    reasons.push(
+      "Binance account sync failed; account risk remains reference-only.",
     );
   }
 
-  const liveResults = await Promise.allSettled(
-    config.trackedPairs.map(async (symbol) => {
-      const snapshot = await fetchCoinankPairSnapshot(config, symbol);
-      return buildLiveDashboardPair(config, snapshot);
-    }),
-  );
-
-  const reasons = [
-    "Coinank live market data loaded for dashboard pairs.",
-    "Account risk remains reference-only until Binance execution is integrated.",
-  ];
-
-  const pairs = liveResults.map((result, index) => {
-    const fallbackSymbol = config.trackedPairs[index];
-
-    if (!fallbackSymbol) {
-      return buildSeededDashboardPair("BTCUSDT");
-    }
-
-    if (result.status === "fulfilled") {
-      return result.value;
-    }
-
-    logger.warn("Falling back to seeded pair after Coinank fetch failure", {
-      error:
-        result.reason instanceof Error
-          ? result.reason.message
-          : String(result.reason),
-      symbol: fallbackSymbol,
-    });
+  if (!accountState) {
     reasons.push(
-      `${fallbackSymbol} is using seeded fallback data after a Coinank fetch failure.`,
+      "Account risk remains reference-only until Binance execution is integrated.",
+    );
+  } else {
+    reasons.push(accountState.reason);
+  }
+
+  let pairs: DashboardPair[];
+
+  if (!coinankConfig) {
+    logger.warn("Coinank API key missing; serving seeded dashboard overview.");
+    reasons.unshift(
+      "Coinank API key missing. Serving seeded dashboard overview.",
+    );
+    pairs = [
+      buildSeededDashboardPair("BTCUSDT"),
+      buildSeededDashboardPair("ETHUSDT"),
+    ];
+  } else {
+    const liveResults = await Promise.allSettled(
+      coinankConfig.trackedPairs.map(async (symbol) => {
+        const snapshot = await fetchCoinankPairSnapshot(coinankConfig, symbol);
+        return buildLiveDashboardPair(coinankConfig, snapshot);
+      }),
     );
 
-    return buildSeededDashboardPair(fallbackSymbol);
-  });
+    reasons.unshift("Coinank live market data loaded for dashboard pairs.");
+
+    pairs = liveResults.map((result, index) => {
+      const fallbackSymbol = coinankConfig.trackedPairs[index];
+
+      if (!fallbackSymbol) {
+        return buildSeededDashboardPair("BTCUSDT");
+      }
+
+      if (result.status === "fulfilled") {
+        return result.value;
+      }
+
+      logger.warn("Falling back to seeded pair after Coinank fetch failure", {
+        error:
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason),
+        symbol: fallbackSymbol,
+      });
+      reasons.push(
+        `${fallbackSymbol} is using seeded fallback data after a Coinank fetch failure.`,
+      );
+
+      return buildSeededDashboardPair(fallbackSymbol);
+    });
+  }
 
   return getDashboardOverviewOutputSchema.parse({
     overview: {
-      accountRisk: buildReferenceAccountRisk(),
+      accountRisk: accountState?.accountRisk ?? buildReferenceAccountRisk(),
       cadenceMinutes: 60,
+      executionConfig: DASHBOARD_EXECUTION_CONFIG,
       generatedAt: new Date().toISOString(),
-      killSwitchEnabled: config.killSwitchEnabled,
+      killSwitchEnabled: coinankConfig?.killSwitchEnabled ?? false,
       operatorMode: "AUTOMATED",
-      pairs,
+      pairs: pairs.map((pair) =>
+        applyExchangePositionToPair(pair, accountState),
+      ),
     },
     reason: reasons.join(" "),
     success: true,

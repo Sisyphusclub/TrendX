@@ -1,18 +1,16 @@
 import type { DashboardOverview, DashboardPair } from "@trendx/api";
 import {
-  Bot,
   BriefcaseBusiness,
   ChartNoAxesCombined,
-  Shield,
-  Sparkles,
+  History,
+  Newspaper,
+  Settings2,
 } from "lucide-react";
 import type { ReactElement } from "react";
 
 import type { DashboardFeedState } from "../lib/feed-state";
 import { getPairFeedMode } from "../lib/feed-state";
 import {
-  formatCheckSummary,
-  formatExecutionStatus,
   formatFeedMode,
   formatSignalLabel,
   formatTrendDirection,
@@ -32,10 +30,10 @@ interface DeskNavigationRailProps {
 }
 
 const sectionIcons = {
-  controls: Sparkles,
-  journal: Bot,
+  controls: Settings2,
+  journal: History,
   overview: BriefcaseBusiness,
-  risk: Shield,
+  risk: Newspaper,
   signals: ChartNoAxesCombined,
 } satisfies Record<DashboardSection, typeof BriefcaseBusiness>;
 
@@ -47,31 +45,51 @@ export function DeskNavigationRail({
   onSignalPairSelect,
   overview,
 }: DeskNavigationRailProps): ReactElement {
-  const activeExposure = overview.pairs.filter(
-    (pair) => pair.currentPosition.side !== "FLAT",
+  const activeEntryCount = overview.pairs.filter(
+    (pair) => pair.action === "ENTRY",
   ).length;
-  const hasLiveExecution = !feedState.hasReferenceRisk;
 
   return (
-    <aside className="desk-rail-shell flex h-full min-h-0 flex-col gap-3 rounded-[26px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] p-3">
-      <div className="rounded-[22px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-4 py-4">
-        <p className="mono text-[10px] uppercase tracking-[0.24em] text-[color:var(--color-muted)]">
-          TrendX
-        </p>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-2xl font-semibold tracking-[-0.06em] text-[color:var(--color-ink)]">
-            交易台
-          </p>
-          <span className="rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--color-ink-soft)]">
+    <aside className="desk-rail-shell flex h-full min-h-0 flex-col gap-3 rounded-[28px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] p-3">
+      <div className="hero-shell rounded-[24px] px-4 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--color-blue)]">
+              TrendX
+            </p>
+            <p className="mt-3 text-[1.55rem] font-semibold tracking-[-0.06em] text-[color:var(--color-ink)]">
+              主控台
+            </p>
+            <p className="mt-1 text-xs text-[color:var(--color-muted)]">
+              BTC / ETH · 1H 顺势执行
+            </p>
+          </div>
+          <span className="rounded-full border border-[color:var(--color-line)] bg-white/72 px-3 py-1 text-[11px] font-semibold text-[color:var(--color-blue)]">
             1H
           </span>
         </div>
-        <p className="mt-2 text-xs text-[color:var(--color-muted)]">
-          BTC / ETH · 顺势自动
-        </p>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="rounded-[18px] border border-[color:var(--color-line)] bg-white/68 px-3 py-3">
+            <p className="mono text-[10px] uppercase tracking-[0.2em] text-[color:var(--color-blue)]">
+              活跃信号
+            </p>
+            <p className="mt-2 text-lg font-semibold tracking-[-0.05em] text-[color:var(--color-ink)]">
+              {activeEntryCount}
+            </p>
+          </div>
+          <div className="rounded-[18px] border border-[color:var(--color-line)] bg-white/68 px-3 py-3">
+            <p className="mono text-[10px] uppercase tracking-[0.2em] text-[color:var(--color-blue)]">
+              风控模式
+            </p>
+            <p className="mt-2 text-sm font-semibold text-[color:var(--color-ink)]">
+              {feedState.hasReferenceRisk ? "参考" : "联动"}
+            </p>
+          </div>
+        </div>
       </div>
 
-      <nav className="grid gap-2">
+      <nav className="grid gap-1.5">
         {dashboardSectionItems.map((item) => {
           const Icon = sectionIcons[item.key];
           const isActive = item.key === activeSection;
@@ -83,11 +101,17 @@ export function DeskNavigationRail({
               onClick={() => onSectionChange(item.key)}
               className={
                 isActive
-                  ? "group flex items-center gap-3 rounded-[18px] border border-[color:var(--color-blue)]/18 bg-[color:var(--color-blue-fog)] px-4 py-3 text-left text-[color:var(--color-blue)]"
-                  : "group flex items-center gap-3 rounded-[18px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-4 py-3 text-left text-[color:var(--color-ink-soft)] transition duration-200 ease-out hover:border-[color:var(--color-line-strong)]"
+                  ? "group flex items-center gap-3 rounded-[18px] border border-[color:var(--color-blue)]/12 bg-[color:var(--color-surface-blue)] px-3.5 py-3 text-left text-[color:var(--color-blue)]"
+                  : "group flex items-center gap-3 rounded-[18px] border border-transparent bg-transparent px-3.5 py-3 text-left text-[color:var(--color-ink-soft)] transition duration-200 ease-out hover:border-[color:var(--color-line)] hover:bg-[color:var(--color-surface-soft)]"
               }
             >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-current/10 bg-[color:var(--color-surface-soft)]">
+              <span
+                className={
+                  isActive
+                    ? "flex size-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-blue)] text-white"
+                    : "flex size-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-surface)] text-[color:var(--color-ink-soft)]"
+                }
+              >
                 <Icon className="size-4" />
               </span>
               <span className="min-w-0 flex-1 text-sm font-semibold">
@@ -98,46 +122,26 @@ export function DeskNavigationRail({
         })}
       </nav>
 
-      <div className="rounded-[22px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-4 py-4">
-        <p className="mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-muted)]">
-          运行状态
-        </p>
-        <div className="mt-3 grid gap-2 text-sm text-[color:var(--color-ink-soft)]">
-          <div className="flex items-center justify-between gap-3">
-            <span>执行</span>
-            <span
-              className={
-                overview.killSwitchEnabled
-                  ? "rounded-full border border-[color:var(--color-bear)]/18 bg-[color:var(--color-bear-soft)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--color-bear)]"
-                  : "rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--color-ink)]"
-              }
-            >
-              {overview.killSwitchEnabled ? "已锁定" : "可用"}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <span>敞口</span>
-            <span className="font-semibold text-[color:var(--color-ink)]">
-              {activeExposure}/2
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <span>风控</span>
-            <span className="font-semibold text-[color:var(--color-ink)]">
-              {hasLiveExecution ? "联动" : "参考"}
-            </span>
-          </div>
+      <div className="min-h-0 rounded-[24px] border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-blue)]">
+            监控交易对
+          </p>
+          <span className="rounded-full border border-[color:var(--color-line)] bg-white/70 px-2.5 py-0.5 text-[10px] font-semibold text-[color:var(--color-ink-soft)]">
+            {overview.pairs.length} 个
+          </span>
         </div>
-      </div>
 
-      <div className="min-h-0 rounded-[22px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-4 py-4">
-        <p className="mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-muted)]">
-          监控交易对
-        </p>
-        <div className="mt-3 grid gap-2">
+        <div className="mt-3 grid min-h-0 gap-2 overflow-y-auto">
           {overview.pairs.map((pair) => {
             const feedMode = getPairFeedMode(feedState, pair.symbol);
             const isActive = activeSignalSymbol === pair.symbol;
+            const signalToneClass =
+              pair.action === "ENTRY"
+                ? "bg-[color:var(--color-profit)]"
+                : pair.action === "EXIT"
+                  ? "bg-[color:var(--color-loss)]"
+                  : "bg-[color:var(--color-wait)]";
 
             return (
               <button
@@ -146,43 +150,36 @@ export function DeskNavigationRail({
                 onClick={() => onSignalPairSelect(pair.symbol)}
                 className={
                   isActive
-                    ? "rounded-[18px] border border-[color:var(--color-blue)]/18 bg-[color:var(--color-blue-fog)] px-3 py-3 text-left"
-                    : "rounded-[18px] border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-3 py-3 text-left transition duration-200 ease-out hover:border-[color:var(--color-line-strong)]"
+                    ? "rounded-[18px] border border-[color:var(--color-blue)]/12 bg-white px-3 py-3 text-left shadow-[0_12px_26px_rgba(15,32,64,0.06)]"
+                    : "rounded-[18px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-3 py-3 text-left transition duration-200 ease-out hover:border-[color:var(--color-line-strong)] hover:bg-white"
                 }
               >
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-[color:var(--color-ink)]">
-                    {pair.symbol}
-                  </p>
-                  <span className="text-xs font-medium text-[color:var(--color-ink-soft)]">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className={`size-1.5 shrink-0 rounded-full ${signalToneClass}`}
+                    />
+                    <p className="truncate text-[13px] font-semibold text-[color:var(--color-ink)]">
+                      {pair.symbol}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--color-ink-soft)]">
                     {formatSignalLabel(pair.action)}
                   </span>
                 </div>
-                <div className="mt-2 grid gap-1 text-xs text-[color:var(--color-ink-soft)]">
-                  <p>
-                    {formatTrendDirection(pair.trendDirection)} ·{" "}
-                    {formatCheckSummary(
-                      pair.confirmationCount,
-                      pair.checklist.length,
-                      pair.confirmationThreshold,
-                    )}
-                  </p>
-                  <p className="flex items-center gap-1.5">
-                    <span>{formatExecutionStatus(pair.executionStatus)}</span>
-                    <span className="text-[color:var(--color-line-strong)]">
-                      ·
-                    </span>
-                    <span
-                      className={
-                        feedMode === "fallback"
-                          ? "font-semibold text-[color:var(--color-wait)]"
-                          : "font-semibold text-[color:var(--color-blue)]"
-                      }
-                    >
-                      {formatFeedMode(feedMode)}
-                    </span>
-                  </p>
-                </div>
+                <p className="mt-1.5 text-[11px] text-[color:var(--color-muted)]">
+                  {formatTrendDirection(pair.trendDirection)} ·{" "}
+                  <span
+                    className={
+                      feedMode === "fallback"
+                        ? "font-medium text-[color:var(--color-wait)]"
+                        : "font-medium text-[color:var(--color-blue)]"
+                    }
+                  >
+                    {formatFeedMode(feedMode)}
+                  </span>
+                </p>
               </button>
             );
           })}

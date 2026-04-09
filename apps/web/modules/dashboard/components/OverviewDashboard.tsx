@@ -38,10 +38,16 @@ function getTone(value: number): MarketTile["tone"] {
   return value >= 0 ? "bull" : "bear";
 }
 
-function getToneClasses(tone: MarketTile["tone"]): string {
-  return tone === "bull"
-    ? "bg-[color:var(--color-bull-soft)] text-[color:var(--color-bull)]"
-    : "bg-[color:var(--color-bear-soft)] text-[color:var(--color-bear)]";
+function getActionToneClasses(action: DashboardPair["action"]): string {
+  if (action === "ENTRY") {
+    return "border-[color:var(--color-bull)]/20 bg-[color:var(--color-bull-soft)] text-[color:var(--color-bull)]";
+  }
+
+  if (action === "EXIT") {
+    return "border-[color:var(--color-bear)]/20 bg-[color:var(--color-bear-soft)] text-[color:var(--color-bear)]";
+  }
+
+  return "border-[color:var(--color-wait)]/20 bg-[color:var(--color-wait-soft)] text-[color:var(--color-wait)]";
 }
 
 function buildMarketTiles(
@@ -78,7 +84,6 @@ export function OverviewDashboard({
   const liveTime = new Date(overview.generatedAt).toLocaleTimeString("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
   });
   const marketTiles = buildMarketTiles(overview.pairs);
   const readyCount = overview.pairs.filter(
@@ -101,199 +106,307 @@ export function OverviewDashboard({
     return right.confirmationCount - left.confirmationCount;
   });
   const dominantSignal = rankedSignals[0] ?? overview.pairs.at(0);
+  const recentSignals = rankedSignals.slice(0, 2);
 
   if (!dominantSignal) {
     throw new Error("TrendX overview requires at least one tracked pair.");
   }
 
   return (
-    <section className="grid gap-6 pb-6 pr-1">
-      <header className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+    <section className="grid gap-4 pb-4">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="mono text-[10px] uppercase tracking-[0.24em] text-[color:var(--color-muted)]">
+          <p className="mono text-[10px] uppercase tracking-[0.24em] text-[color:var(--color-blue)]">
             总览
           </p>
-          <h1 className="display mt-2 text-[clamp(1.6rem,2.7vw,2.45rem)] font-semibold leading-none tracking-[-0.06em] text-[color:var(--color-ink)]">
-            仪表板
+          <h1 className="display mt-2 text-[clamp(1.45rem,2.2vw,2rem)] font-semibold leading-none tracking-[-0.06em] text-[color:var(--color-ink)]">
+            主控台
           </h1>
-          <p className="mt-2 text-sm text-[color:var(--color-muted)]">
-            欢迎回来，主交易席位。
+          <p className="mt-1.5 text-sm text-[color:var(--color-muted)]">
+            以 1 小时节奏监控 BTCUSDT 与 ETHUSDT 的顺势执行。
           </p>
         </div>
 
-        <div className="flex items-center gap-3 text-sm text-[color:var(--color-muted)]">
-          <div className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-[color:var(--color-bull)]" />
-            <span>
-              {feedState.hasLiveSignals
-                ? "热门行情（实时）"
-                : "热门行情（回退）"}
-            </span>
-          </div>
-          <span>{liveTime}</span>
+        <div className="flex flex-wrap gap-2">
+          <span
+            className={
+              feedState.hasLiveSignals
+                ? "rounded-full border border-[color:var(--color-bull)]/20 bg-[color:var(--color-bull-soft)] px-3 py-1 text-[11px] font-semibold text-[color:var(--color-bull)]"
+                : "rounded-full border border-[color:var(--color-wait)]/20 bg-[color:var(--color-wait-soft)] px-3 py-1 text-[11px] font-semibold text-[color:var(--color-wait)]"
+            }
+          >
+            {feedState.hasLiveSignals ? "信号实时" : "信号回退"}
+          </span>
+          <span className="rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-3 py-1 text-[11px] font-semibold text-[color:var(--color-ink-soft)]">
+            刷新 {liveTime}
+          </span>
         </div>
       </header>
 
-      <section className="grid gap-3 xl:grid-cols-6 md:grid-cols-3 sm:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.12fr)_0.88fr]">
+        <section className="hero-shell rounded-[30px] px-5 py-5 md:px-6 md:py-6">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${getActionToneClasses(dominantSignal.action)}`}
+                  >
+                    {formatSignalLabel(dominantSignal.action)}
+                  </span>
+                  <span className="rounded-full border border-[color:var(--color-blue)]/16 bg-white/76 px-3 py-1 text-[11px] font-semibold text-[color:var(--color-blue)]">
+                    {formatTrendDirection(dominantSignal.trendDirection)}
+                  </span>
+                  <span className="rounded-full border border-[color:var(--color-line)] bg-white/68 px-3 py-1 text-[11px] font-semibold text-[color:var(--color-ink-soft)]">
+                    1H
+                  </span>
+                </div>
+
+                <h2 className="display mt-4 text-[clamp(1.9rem,4vw,3rem)] font-semibold tracking-[-0.08em] text-[color:var(--color-ink)]">
+                  {dominantSignal.symbol}
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-7 text-[color:var(--color-ink-soft)]">
+                  {formatCheckSummary(
+                    dominantSignal.confirmationCount,
+                    dominantSignal.checklist.length,
+                    dominantSignal.confirmationThreshold,
+                  )}
+                  ，当前执行状态{" "}
+                  {formatExecutionStatus(dominantSignal.executionStatus)}，
+                  {formatRiskLabel(dominantSignal.riskLabel)}。
+                </p>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                <div className="rounded-[22px] border border-[color:var(--color-line)] bg-white/68 px-4 py-4">
+                  <p className="mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-blue)]">
+                    主订单块
+                  </p>
+                  <p className="mt-2 text-lg font-semibold tracking-[-0.05em] text-[color:var(--color-ink)]">
+                    {formatUsd(dominantSignal.orderBlock.low)} -{" "}
+                    {formatUsd(dominantSignal.orderBlock.high)}
+                  </p>
+                  <p className="mt-1.5 text-xs text-[color:var(--color-muted)]">
+                    中位 {formatUsd(dominantSignal.orderBlock.mid)}
+                  </p>
+                </div>
+
+                <div className="rounded-[22px] border border-[color:var(--color-line)] bg-white/68 px-4 py-4">
+                  <p className="mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-blue)]">
+                    标记价格
+                  </p>
+                  <p className="mt-2 text-lg font-semibold tracking-[-0.05em] text-[color:var(--color-ink)]">
+                    {formatUsd(dominantSignal.markPrice)}
+                  </p>
+                  <p className="mt-1.5 text-xs text-[color:var(--color-muted)]">
+                    {liveTime} 更新
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-[22px] border border-[color:var(--color-line)] bg-white/72 px-4 py-4">
+                <p className="text-sm text-[color:var(--color-muted)]">
+                  信号触发
+                </p>
+                <p className="mt-3 text-[1.8rem] font-semibold tracking-[-0.06em] text-[color:var(--color-ink)]">
+                  {readyCount}
+                </p>
+                <p className="mt-1.5 text-xs text-[color:var(--color-muted)]">
+                  {waitCount} 个交易对继续等待
+                </p>
+              </div>
+
+              <div className="rounded-[22px] border border-[color:var(--color-line)] bg-white/72 px-4 py-4">
+                <p className="text-sm text-[color:var(--color-muted)]">PNL</p>
+                <p
+                  className={
+                    totalPnl >= 0
+                      ? "mt-3 text-[1.8rem] font-semibold tracking-[-0.06em] text-[color:var(--color-bull)]"
+                      : "mt-3 text-[1.8rem] font-semibold tracking-[-0.06em] text-[color:var(--color-bear)]"
+                  }
+                >
+                  {formatUsd(totalPnl)}
+                </p>
+                <p className="mt-1.5 text-xs text-[color:var(--color-muted)]">
+                  日内账本 + 持仓浮盈亏
+                </p>
+              </div>
+
+              <div className="rounded-[22px] border border-[color:var(--color-line)] bg-white/72 px-4 py-4">
+                <p className="text-sm text-[color:var(--color-muted)]">
+                  风险暴露
+                </p>
+                <p className="mt-3 text-[1.8rem] font-semibold tracking-[-0.06em] text-[color:var(--color-ink)]">
+                  {overview.accountRisk.exposurePct.toFixed(1)}%
+                </p>
+                <p className="mt-1.5 text-xs text-[color:var(--color-muted)]">
+                  已用保证金 {formatUsd(overview.accountRisk.usedMargin)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenSignalPair(dominantSignal.symbol)}
+                className="inline-flex min-h-11 items-center rounded-full border border-[color:var(--color-blue)] bg-[color:var(--color-blue)] px-4 py-2 text-sm font-semibold text-white transition duration-200 ease-out hover:-translate-y-[1px] hover:bg-[color:var(--color-blue-soft)]"
+              >
+                查看 {dominantSignal.symbol} 信号
+              </button>
+              <button
+                type="button"
+                onClick={() => onSectionChange("controls")}
+                className="inline-flex min-h-11 items-center rounded-full border border-[color:var(--color-line)] bg-white/76 px-4 py-2 text-sm font-semibold text-[color:var(--color-ink-soft)] transition duration-200 ease-out hover:-translate-y-[1px] hover:border-[color:var(--color-line-strong)] hover:text-[color:var(--color-ink)]"
+              >
+                进入设置
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid gap-4">
+          <section className="panel-shell rounded-[28px] px-5 py-5">
+            <p className="mono text-[10px] uppercase tracking-[0.24em] text-[color:var(--color-blue)]">
+              账户状态
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[22px] border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--color-muted)]">
+                  权益
+                </p>
+                <p className="mt-2 text-lg font-semibold tracking-[-0.05em] text-[color:var(--color-ink)]">
+                  {formatUsd(overview.accountRisk.equity)}
+                </p>
+              </div>
+              <div className="rounded-[22px] border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--color-muted)]">
+                  可用保证金
+                </p>
+                <p className="mt-2 text-lg font-semibold tracking-[-0.05em] text-[color:var(--color-ink)]">
+                  {formatUsd(overview.accountRisk.availableMargin)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span
+                className={
+                  overview.killSwitchEnabled
+                    ? "rounded-full border border-[color:var(--color-bear)]/20 bg-[color:var(--color-bear-soft)] px-3 py-1 text-[11px] font-semibold text-[color:var(--color-bear)]"
+                    : "rounded-full border border-[color:var(--color-bull)]/20 bg-[color:var(--color-bull-soft)] px-3 py-1 text-[11px] font-semibold text-[color:var(--color-bull)]"
+                }
+              >
+                {overview.killSwitchEnabled ? "总开关已开启" : "自动执行可用"}
+              </span>
+              <span
+                className={
+                  feedState.hasReferenceRisk
+                    ? "rounded-full border border-[color:var(--color-blue)]/16 bg-[color:var(--color-blue-fog)] px-3 py-1 text-[11px] font-semibold text-[color:var(--color-blue)]"
+                    : "rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-3 py-1 text-[11px] font-semibold text-[color:var(--color-ink-soft)]"
+                }
+              >
+                {feedState.hasReferenceRisk ? "风控参考账本" : "风控实时联动"}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onSectionChange("controls")}
+              className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--color-ink)] transition duration-200 ease-out hover:text-[color:var(--color-blue)]"
+            >
+              查看设置
+              <ArrowRight className="size-4" />
+            </button>
+          </section>
+
+          <section className="panel-shell rounded-[28px] px-5 py-5">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="mono text-[10px] uppercase tracking-[0.24em] text-[color:var(--color-blue)]">
+                  最近信号
+                </p>
+                <h2 className="mt-1 text-lg font-semibold tracking-[-0.05em] text-[color:var(--color-ink)]">
+                  优先关注
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => onSectionChange("signals")}
+                className="text-sm font-medium text-[color:var(--color-muted)] transition duration-200 ease-out hover:text-[color:var(--color-ink)]"
+              >
+                查看全部
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              {recentSignals.map((pair) => (
+                <button
+                  key={pair.symbol}
+                  type="button"
+                  onClick={() => onOpenSignalPair(pair.symbol)}
+                  className="group flex w-full items-center gap-4 rounded-[22px] border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-4 py-4 text-left transition duration-200 ease-out hover:border-[color:var(--color-line-strong)] hover:bg-white"
+                >
+                  <div className="flex size-14 shrink-0 items-center justify-center rounded-[18px] border border-[color:var(--color-line)] bg-white">
+                    <span className="text-sm font-semibold tracking-[0.14em] text-[color:var(--color-ink-soft)]">
+                      {pair.symbol.replace("USDT", "")}
+                    </span>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getActionToneClasses(pair.action)}`}
+                      >
+                        {formatSignalLabel(pair.action)}
+                      </span>
+                      <span className="text-[11px] text-[color:var(--color-muted)]">
+                        {formatTrendDirection(pair.trendDirection)}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-[color:var(--color-ink)]">
+                      {pair.symbol}
+                    </p>
+                    <p className="mt-1 text-[12px] text-[color:var(--color-muted)]">
+                      {formatCheckSummary(
+                        pair.confirmationCount,
+                        pair.checklist.length,
+                        pair.confirmationThreshold,
+                      )}{" "}
+                      · {formatExecutionStatus(pair.executionStatus)}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         {marketTiles.map((tile) => (
           <div
             key={tile.key}
-            className="relative overflow-hidden rounded-[2px] border border-[color:var(--color-line)] bg-[rgba(8,8,8,0.82)] px-4 py-4"
+            className="rounded-[22px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-4 py-4"
           >
-            <span
-              className={`absolute inset-y-0 left-0 w-[3px] ${tile.tone === "bull" ? "bg-[color:var(--color-bull)]" : "bg-[color:var(--color-bear)]"}`}
-            />
-            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[color:var(--color-ink-soft)]">
-              {tile.caption}
-            </p>
-            <p className="mt-4 text-[1.05rem] font-semibold tracking-[-0.04em] text-[color:var(--color-ink)]">
+            <div className="flex items-center gap-2">
+              <span
+                className={
+                  tile.tone === "bull"
+                    ? "size-2 rounded-full bg-[color:var(--color-bull)]"
+                    : "size-2 rounded-full bg-[color:var(--color-bear)]"
+                }
+              />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--color-muted)]">
+                {tile.caption}
+              </p>
+            </div>
+            <p className="mt-3 text-[1rem] font-semibold tracking-[-0.04em] text-[color:var(--color-ink)]">
               {tile.value}
             </p>
           </div>
         ))}
-      </section>
-
-      <section className="grid gap-3 xl:grid-cols-[1fr_1fr_1fr_0.96fr]">
-        <div className="rounded-[2px] border border-[color:var(--color-line)] bg-[rgba(7,7,7,0.78)] px-6 py-5">
-          <p className="text-sm text-[color:var(--color-muted)]">信号触发</p>
-          <p className="mt-4 text-[2rem] font-semibold tracking-[-0.06em] text-[color:var(--color-ink)]">
-            {readyCount}
-          </p>
-          <p className="mt-2 text-[13px] text-[color:var(--color-muted)]">
-            {waitCount} 个交易对继续等待
-          </p>
-        </div>
-
-        <div className="rounded-[2px] border border-[color:var(--color-line)] bg-[rgba(7,7,7,0.78)] px-6 py-5">
-          <p className="text-sm text-[color:var(--color-muted)]">PNL</p>
-          <p
-            className={
-              totalPnl >= 0
-                ? "mt-4 text-[2rem] font-semibold tracking-[-0.06em] text-[color:var(--color-bull)]"
-                : "mt-4 text-[2rem] font-semibold tracking-[-0.06em] text-[color:var(--color-bear)]"
-            }
-          >
-            {formatUsd(totalPnl)}
-          </p>
-          <p className="mt-2 text-[13px] text-[color:var(--color-muted)]">
-            日内账本 + 持仓浮盈亏
-          </p>
-        </div>
-
-        <div className="rounded-[2px] border border-[color:var(--color-line)] bg-[rgba(7,7,7,0.78)] px-6 py-5">
-          <p className="text-sm text-[color:var(--color-muted)]">风险暴露</p>
-          <p className="mt-4 text-[2rem] font-semibold tracking-[-0.06em] text-[color:var(--color-ink)]">
-            {overview.accountRisk.exposurePct.toFixed(1)}%
-          </p>
-          <p className="mt-2 text-[13px] text-[color:var(--color-muted)]">
-            已用保证金 {formatUsd(overview.accountRisk.usedMargin)}
-          </p>
-        </div>
-
-        <div className="rounded-[2px] border border-[color:var(--color-line)] bg-[rgba(7,7,7,0.78)] px-5 py-5">
-          <div className="flex items-center gap-2">
-            <span
-              className={`size-7 rounded-[2px] border border-[color:var(--color-line)] ${overview.killSwitchEnabled ? "bg-[color:var(--color-bear-soft)]" : "bg-[color:var(--color-surface)]"}`}
-            />
-            <span className="rounded-[2px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--color-ink-soft)]">
-              {feedState.hasLiveSignals ? "LIVE" : "SYNC"}
-            </span>
-          </div>
-          <p className="mt-4 text-[1.1rem] font-semibold text-[color:var(--color-ink)]">
-            {overview.killSwitchEnabled ? "自动执行已锁定" : "自动执行可用"}
-          </p>
-          <p className="mt-1 text-[13px] text-[color:var(--color-muted)]">
-            {feedState.hasReferenceRisk
-              ? "当前风控为参考账本。"
-              : "当前风控与交易所联动。"}
-          </p>
-          <button
-            type="button"
-            onClick={() => onSectionChange("controls")}
-            className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--color-ink)] transition duration-200 ease-out hover:text-[color:var(--color-blue)]"
-          >
-            查看执行规则
-            <ArrowRight className="size-4" />
-          </button>
-        </div>
-      </section>
-
-      <section className="grid gap-3">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h2 className="display text-[1.55rem] font-semibold tracking-[-0.045em] text-[color:var(--color-ink)]">
-              最近信号
-            </h2>
-            <p className="mt-1 text-[13px] text-[color:var(--color-muted)]">
-              当前优先关注 {dominantSignal.symbol}。
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onSectionChange("signals")}
-            className="text-sm font-medium text-[color:var(--color-muted)] transition duration-200 ease-out hover:text-[color:var(--color-ink)]"
-          >
-            查看全部
-          </button>
-        </div>
-
-        <div className="grid gap-3">
-          {rankedSignals.slice(0, 1).map((pair) => {
-            const actionTone = getToneClasses(
-              pair.action === "WAIT" ? "bear" : "bull",
-            );
-
-            return (
-              <button
-                key={pair.symbol}
-                type="button"
-                onClick={() => onOpenSignalPair(pair.symbol)}
-                className="group flex w-full items-center gap-4 rounded-[2px] border border-[color:var(--color-line)] bg-[rgba(7,7,7,0.78)] px-4 py-4 text-left transition duration-200 ease-out hover:border-[color:var(--color-line-strong)] hover:bg-[rgba(10,10,10,0.9)]"
-              >
-                <div className="flex size-16 shrink-0 items-center justify-center rounded-[2px] border border-[color:var(--color-line)] bg-black/50">
-                  <span className="text-sm font-semibold tracking-[0.14em] text-[color:var(--color-ink-soft)]">
-                    {pair.symbol.replace("USDT", "")}
-                  </span>
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`rounded-[2px] border border-current/12 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${actionTone}`}
-                    >
-                      {formatSignalLabel(pair.action)}
-                    </span>
-                    <span className="text-xs text-[color:var(--color-muted)]">
-                      1H
-                    </span>
-                    <span className="text-xs text-[color:var(--color-muted)]">
-                      {formatTrendDirection(pair.trendDirection)}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-[1.05rem] font-semibold text-[color:var(--color-ink)]">
-                    BINANCE:{pair.symbol}
-                  </p>
-                  <p className="mt-1 text-[13px] text-[color:var(--color-muted)]">
-                    {liveTime} · {formatRiskLabel(pair.riskLabel)}
-                  </p>
-                </div>
-
-                <div className="hidden shrink-0 text-right md:block">
-                  <p className="text-sm font-semibold text-[color:var(--color-ink)]">
-                    {formatCheckSummary(
-                      pair.confirmationCount,
-                      pair.checklist.length,
-                      pair.confirmationThreshold,
-                    )}
-                  </p>
-                  <p className="mt-1 text-[12px] text-[color:var(--color-muted)]">
-                    {formatExecutionStatus(pair.executionStatus)}
-                  </p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
       </section>
     </section>
   );

@@ -1,3 +1,4 @@
+import { DASHBOARD_EXECUTION_CONFIG } from "../config";
 import type { DashboardPair, GetDashboardOverviewOutput } from "../types";
 
 import { getDashboardOverviewOutputSchema } from "../types";
@@ -64,9 +65,9 @@ function buildPair(params: {
   return {
     action: params.action,
     confirmationCount,
-    confirmationThreshold: 3,
+    confirmationThreshold: DASHBOARD_EXECUTION_CONFIG.confirmationThreshold,
     currentPosition: {
-      leverage: 20,
+      leverage: DASHBOARD_EXECUTION_CONFIG.leverage,
       pnl: params.currentPnl,
       side: params.side,
       sizeUsd: params.sizeUsd,
@@ -100,9 +101,19 @@ export function buildSeededDashboardPair(
       currentPnl: 482.3,
       cvdBiasPct: 2.8,
       entryStages: [
-        { allocationPct: 30, plannedPrice: 68240, zone: "upper" },
-        { allocationPct: 40, plannedPrice: 67980, zone: "mid" },
-        { allocationPct: 30, plannedPrice: 67730, zone: "lower" },
+        {
+          allocationPct: 30,
+          plannedPrice: 68240,
+          status: "TRIGGERED",
+          zone: "upper",
+        },
+        { allocationPct: 40, plannedPrice: 67980, status: "NEXT", zone: "mid" },
+        {
+          allocationPct: 30,
+          plannedPrice: 67730,
+          status: "WAITING",
+          zone: "lower",
+        },
       ],
       executionStatus: "ARMED",
       fundingRate: 0.012,
@@ -133,9 +144,19 @@ export function buildSeededDashboardPair(
     currentPnl: -41.6,
     cvdBiasPct: -0.8,
     entryStages: [
-      { allocationPct: 30, plannedPrice: 3524, zone: "upper" },
-      { allocationPct: 40, plannedPrice: 3496, zone: "mid" },
-      { allocationPct: 30, plannedPrice: 3472, zone: "lower" },
+      {
+        allocationPct: 30,
+        plannedPrice: 3524,
+        status: "LOCKED",
+        zone: "upper",
+      },
+      { allocationPct: 40, plannedPrice: 3496, status: "LOCKED", zone: "mid" },
+      {
+        allocationPct: 30,
+        plannedPrice: 3472,
+        status: "LOCKED",
+        zone: "lower",
+      },
     ],
     executionStatus: "PENDING",
     fundingRate: 0.021,
@@ -174,6 +195,7 @@ export function buildSeededDashboardOverview(
         usedMargin: 20130,
       },
       cadenceMinutes: 60,
+      executionConfig: DASHBOARD_EXECUTION_CONFIG,
       generatedAt: new Date().toISOString(),
       killSwitchEnabled: false,
       operatorMode: "AUTOMATED",

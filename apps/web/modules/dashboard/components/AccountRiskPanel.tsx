@@ -8,6 +8,7 @@ import { formatPct, formatUsd } from "../lib/formatters";
 
 interface AccountRiskPanelProps {
   accountRisk: DashboardOverview["accountRisk"];
+  executionConfig: DashboardOverview["executionConfig"];
   generatedAt: string;
   isReferenceOnly: boolean;
   killSwitchEnabled: boolean;
@@ -15,6 +16,7 @@ interface AccountRiskPanelProps {
 
 export function AccountRiskPanel({
   accountRisk,
+  executionConfig,
   generatedAt,
   isReferenceOnly,
   killSwitchEnabled,
@@ -127,7 +129,8 @@ export function AccountRiskPanel({
                 仓位规则
               </p>
               <p className="mt-2 text-lg font-semibold text-white">
-                余额 5% / 20 倍全仓
+                余额 {executionConfig.balanceAllocationPct}% /{" "}
+                {executionConfig.leverage} 倍全仓
               </p>
             </div>
           </div>

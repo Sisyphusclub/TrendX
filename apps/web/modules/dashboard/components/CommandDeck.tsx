@@ -60,7 +60,9 @@ export function CommandDeck({
     ? "总开关开启，只保留监控。"
     : feedState.hasReferenceRisk
       ? "信号实时，风控仍是参考账本。"
-      : "信号与风控都处于联动状态。";
+      : feedState.hasLiveSignals
+        ? "信号与风控都处于联动状态。"
+        : "风控已接交易所，信号仍使用回退数据。";
 
   return (
     <section className="hero-shell rounded-[26px] p-3 md:p-4">

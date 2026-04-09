@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, IBM_Plex_Mono, Manrope } from "next/font/google";
+import { IBM_Plex_Mono, Public_Sans, Space_Grotesk } from "next/font/google";
 import type { ReactElement, ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
@@ -8,9 +8,10 @@ import { Providers } from "./providers";
 
 import "./globals.css";
 
-const displayFont = Bricolage_Grotesque({
+const displayFont = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-display",
+  weight: ["500", "600", "700"],
 });
 
 const monoFont = IBM_Plex_Mono({
@@ -19,10 +20,10 @@ const monoFont = IBM_Plex_Mono({
   weight: ["400", "500", "600"],
 });
 
-const bodyFont = Manrope({
+const bodyFont = Public_Sans({
   subsets: ["latin"],
   variable: "--font-body",
-  weight: ["500", "600", "700", "800"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -40,7 +41,7 @@ export default function RootLayout({
   return (
     <html
       className={cn(displayFont.variable, monoFont.variable, bodyFont.variable)}
-      lang="en"
+      lang="zh-CN"
       suppressHydrationWarning
     >
       <body className="min-h-screen bg-[color:var(--color-canvas)] text-[color:var(--color-ink)] antialiased">

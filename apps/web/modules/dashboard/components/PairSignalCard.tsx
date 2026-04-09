@@ -1,12 +1,18 @@
-import type { DashboardPair } from "@trendx/api";
+"use client";
+
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { DashboardExecutionConfig, DashboardPair } from "@trendx/api";
 import {
   ArrowDownRight,
   ArrowUpRight,
   CircleDashed,
+  LoaderCircle,
   ShieldCheck,
 } from "lucide-react";
 import type { ReactElement } from "react";
+import { useState } from "react";
 
+import { orpc } from "@/lib/orpc";
 import { Panel } from "@/modules/shared/components/Panel";
 
 import {
@@ -14,9 +20,11 @@ import {
   formatRationale,
   formatRiskLabel,
 } from "../lib/copy";
+import { getEntryStageBudget } from "../lib/execution-sizing";
 import {
   formatCheckSummary,
   formatCompact,
+  formatEntryStageStatus,
   formatExecutionStatus,
   formatFeedMode,
   formatPct,
@@ -27,6 +35,8 @@ import {
 } from "../lib/formatters";
 
 interface PairSignalCardProps {
+  accountEquity: number;
+  executionConfig: DashboardExecutionConfig;
   feedMode: "fallback" | "live";
   isReferenceRisk: boolean;
   pair: DashboardPair;
@@ -56,15 +66,109 @@ function getSignalBadge(action: DashboardPair["action"]): string {
   return "border-[color:var(--color-wait)]/20 bg-[color:var(--color-wait-soft)] text-[color:var(--color-wait)]";
 }
 
+function getEntryStageTone(
+  status: DashboardPair["entryStages"][number]["status"],
+): {
+  badgeClassName: string;
+  cardClassName: string;
+  priceClassName: string;
+} {
+  if (status === "TRIGGERED") {
+    return {
+      badgeClassName:
+        "border-[color:var(--color-bull)]/20 bg-[color:var(--color-bull-soft)] text-[color:var(--color-bull)]",
+      cardClassName:
+        "border-[color:var(--color-bull)]/16 bg-[color:var(--color-bull)]/8",
+      priceClassName: "text-white",
+    };
+  }
+
+  if (status === "NEXT") {
+    return {
+      badgeClassName:
+        "border-[color:var(--color-blue)]/16 bg-[color:var(--color-blue-fog)] text-[color:var(--color-blue)]",
+      cardClassName: "border-[color:var(--color-blue)]/16 bg-white/8",
+      priceClassName: "text-white",
+    };
+  }
+
+  if (status === "LOCKED") {
+    return {
+      badgeClassName:
+        "border-[color:var(--color-line)] bg-white/6 text-white/42",
+      cardClassName: "border-white/8 bg-white/4",
+      priceClassName: "text-white/48",
+    };
+  }
+
+  return {
+    badgeClassName: "border-[color:var(--color-line)] bg-white/6 text-white/60",
+    cardClassName: "border-white/10 bg-white/6",
+    priceClassName: "text-white/80",
+  };
+}
+
 export function PairSignalCard({
+  accountEquity,
+  executionConfig,
   feedMode,
   isReferenceRisk,
   pair,
 }: PairSignalCardProps): ReactElement {
+  const queryClient = useQueryClient();
+  const [executionFeedback, setExecutionFeedback] = useState<string | null>(
+    null,
+  );
   const confirmationProgress = Math.min(
     pair.confirmationCount / pair.checklist.length,
     1,
   );
+  const executeNextStageMutation = useMutation({
+    ...orpc.execution.executeNextStage.mutationOptions(),
+    onError: (error) => {
+      setExecutionFeedback(error.message);
+    },
+    onSuccess: async (result) => {
+      setExecutionFeedback(result.reason);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: orpc.dashboard.getOverview.key(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: orpc.dashboard.getExecutionHistory.key(),
+        }),
+      ]);
+    },
+  });
+  const closePositionMutation = useMutation({
+    ...orpc.execution.closePosition.mutationOptions(),
+    onError: (error) => {
+      setExecutionFeedback(error.message);
+    },
+    onSuccess: async (result) => {
+      setExecutionFeedback(result.reason);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: orpc.dashboard.getOverview.key(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: orpc.dashboard.getExecutionHistory.key(),
+        }),
+      ]);
+    },
+  });
+  const hasLiveRisk = !isReferenceRisk;
+  const canExecuteNextStage =
+    hasLiveRisk &&
+    feedMode === "live" &&
+    pair.action === "ENTRY" &&
+    !executeNextStageMutation.isPending &&
+    !closePositionMutation.isPending;
+  const canClosePosition =
+    hasLiveRisk &&
+    pair.currentPosition.side !== "FLAT" &&
+    !executeNextStageMutation.isPending &&
+    !closePositionMutation.isPending;
 
   const directionIcon =
     pair.trendDirection === "BEARISH" ? (
@@ -203,6 +307,67 @@ export function PairSignalCard({
               ))}
             </div>
           </div>
+
+          <div className="mt-5 rounded-[28px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="mono text-[11px] uppercase tracking-[0.2em] text-[color:var(--color-muted)]">
+                  Testnet 执行
+                </p>
+                <p className="mt-2 text-sm text-[color:var(--color-ink-soft)]">
+                  只允许 Binance testnet，且新开仓必须使用实时信号。
+                </p>
+              </div>
+              {executeNextStageMutation.isPending ||
+              closePositionMutation.isPending ? (
+                <LoaderCircle className="size-4 animate-spin text-[color:var(--color-blue)]" />
+              ) : null}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  executeNextStageMutation.mutate({
+                    symbol: pair.symbol,
+                  })
+                }
+                disabled={!canExecuteNextStage}
+                className={
+                  canExecuteNextStage
+                    ? "inline-flex min-h-10 items-center rounded-full border border-[color:var(--color-blue)] bg-[color:var(--color-blue)] px-4 py-2 text-sm font-semibold text-[color:var(--color-surface-dark)] transition duration-200 ease-out hover:-translate-y-[1px] hover:bg-[color:var(--color-blue-soft)]"
+                    : "inline-flex min-h-10 items-center rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-4 py-2 text-sm font-semibold text-[color:var(--color-muted)]"
+                }
+              >
+                执行下一档
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  closePositionMutation.mutate({
+                    symbol: pair.symbol,
+                  })
+                }
+                disabled={!canClosePosition}
+                className={
+                  canClosePosition
+                    ? "inline-flex min-h-10 items-center rounded-full border border-[color:var(--color-line-strong)] bg-[color:var(--color-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--color-ink)] transition duration-200 ease-out hover:-translate-y-[1px] hover:border-[color:var(--color-bear)] hover:text-[color:var(--color-bear)]"
+                    : "inline-flex min-h-10 items-center rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-4 py-2 text-sm font-semibold text-[color:var(--color-muted)]"
+                }
+              >
+                市价平仓
+              </button>
+            </div>
+
+            <p className="mt-3 text-sm text-[color:var(--color-ink-soft)]">
+              {executionFeedback ??
+                (isReferenceRisk
+                  ? "先完成 Binance testnet 账户同步后再执行。"
+                  : feedMode === "fallback"
+                    ? "当前信号是回退数据，禁止新开仓，但仍允许平仓。"
+                    : "下一档只有在对应分段已触发时才会执行。")}
+            </p>
+          </div>
         </div>
 
         <div className="grid gap-4">
@@ -211,30 +376,53 @@ export function PairSignalCard({
               分段执行
             </p>
             <div className="mt-4 grid gap-3">
-              {pair.entryStages.map((stage) => (
-                <div
-                  key={stage.zone}
-                  className="rounded-[22px] border border-white/10 bg-white/6 px-4 py-4"
-                >
-                  <div className="flex items-end justify-between gap-4">
-                    <div>
-                      <p className="mono text-[11px] uppercase tracking-[0.2em] muted-on-dark">
-                        {stage.zone === "upper"
-                          ? "上沿"
-                          : stage.zone === "mid"
-                            ? "中段"
-                            : "下沿"}
-                      </p>
-                      <p className="mt-2 text-2xl font-bold tracking-[-0.05em] text-white">
-                        {stage.allocationPct}%
-                      </p>
+              {pair.entryStages.map((stage) =>
+                (() => {
+                  const stageBudget = getEntryStageBudget(
+                    accountEquity,
+                    executionConfig,
+                    stage.allocationPct,
+                  );
+
+                  return (
+                    <div
+                      key={stage.zone}
+                      className={`rounded-[22px] border px-4 py-4 ${getEntryStageTone(stage.status).cardClassName}`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="mono text-[11px] uppercase tracking-[0.2em] muted-on-dark">
+                            {stage.zone === "upper"
+                              ? "上沿"
+                              : stage.zone === "mid"
+                                ? "中段"
+                                : "下沿"}
+                          </p>
+                          <p className="mt-2 text-2xl font-bold tracking-[-0.05em] text-white">
+                            {stage.allocationPct}%
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span
+                            className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getEntryStageTone(stage.status).badgeClassName}`}
+                          >
+                            {formatEntryStageStatus(stage.status)}
+                          </span>
+                          <p
+                            className={`mt-3 text-sm font-medium ${getEntryStageTone(stage.status).priceClassName}`}
+                          >
+                            {formatUsd(stage.plannedPrice)}
+                          </p>
+                          <p className="mt-2 text-[11px] text-white/56">
+                            保证金 {formatUsd(stageBudget.marginUsd)} / 名义{" "}
+                            {formatUsd(stageBudget.notionalUsd)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-sm font-medium text-white/80">
-                      {formatUsd(stage.plannedPrice)}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                  );
+                })(),
+              )}
             </div>
           </div>
 

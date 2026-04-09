@@ -16,6 +16,13 @@ interface SignalTimelinePanelProps {
 export function SignalTimelinePanel({
   pair,
 }: SignalTimelinePanelProps): ReactElement {
+  const triggeredStageCount = pair.entryStages.filter(
+    (stage) => stage.status === "TRIGGERED",
+  ).length;
+  const nextStage = pair.entryStages.find((stage) => stage.status === "NEXT");
+  const lockedStageCount = pair.entryStages.filter(
+    (stage) => stage.status === "LOCKED",
+  ).length;
   const steps = [
     {
       detail: `${formatTrendDirection(pair.trendDirection)}方向已由 OI 与价格结构确认`,
@@ -43,10 +50,22 @@ export function SignalTimelinePanel({
           : "watch",
     },
     {
-      detail: `按 30 / 40 / 30 执行，失效位在 ${formatUsd(pair.stopLoss)} 之外`,
+      detail:
+        lockedStageCount === pair.entryStages.length
+          ? `分段执行未解锁，每一档触发前都要重新满足 ${pair.confirmationThreshold}/6 项，失效位在 ${formatUsd(pair.stopLoss)} 之外`
+          : triggeredStageCount > 0
+            ? `已触发 ${triggeredStageCount}/3 档${
+                nextStage ? `，下一档 ${formatUsd(nextStage.plannedPrice)}` : ""
+              }，剩余档位继续复核 ${pair.confirmationThreshold}/6 项，失效位在 ${formatUsd(pair.stopLoss)} 之外`
+            : `首档等待 ${formatUsd(nextStage?.plannedPrice ?? pair.orderBlock.mid)}，触发前先复核 ${pair.confirmationThreshold}/6 项，失效位在 ${formatUsd(pair.stopLoss)} 之外`,
       icon: ArrowRight,
       label: "执行计划",
-      state: pair.action === "ENTRY" ? "active" : "watch",
+      state:
+        pair.action === "ENTRY"
+          ? "active"
+          : lockedStageCount === pair.entryStages.length
+            ? "watch"
+            : "active",
     },
   ] as const;
 

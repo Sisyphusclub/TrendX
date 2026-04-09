@@ -45,12 +45,43 @@ const longShortRealtimePointSchema = z.object({
   sellTradeTurnover: z.coerce.number(),
 });
 
+const coinankBooleanSchema = z
+  .union([z.boolean(), z.number(), z.string()])
+  .transform((value) => {
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "number") {
+      return value !== 0;
+    }
+
+    return value === "true" || value === "1";
+  });
+
 const cvdPointSchema = z.array(z.coerce.number()).min(4);
+const newsListItemSchema = z.object({
+  content: z.string(),
+  id: z.string().min(1),
+  readNum: z.coerce.number(),
+  recommend: coinankBooleanSchema,
+  sourceWeb: z.string().min(1),
+  title: z.string(),
+  ts: z.coerce.number(),
+});
+const newsPaginationSchema = z.object({
+  current: z.coerce.number(),
+  pageSize: z.coerce.number(),
+  total: z.coerce.number(),
+});
 const priceRowSchema = z.array(z.union([z.coerce.number(), z.string()])).min(6);
 const COINANK_MAX_CONCURRENT_REQUESTS = 2;
 const COINANK_MAX_RETRIES = 3;
 const COINANK_RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 const COINANK_REQUEST_TIMEOUT_MS = 10_000;
+const COINANK_PRICE_CANDLE_LIMIT = 72;
+const COINANK_REFINED_PRICE_CANDLE_INTERVAL = "15m";
+const COINANK_REFINED_PRICE_CANDLE_LIMIT = 192;
 const coinankRequestLimiter = pLimit(COINANK_MAX_CONCURRENT_REQUESTS);
 
 interface CoinankEnvelopeShape<T> {
@@ -89,12 +120,30 @@ export interface CoinankLongShortRealtimePoint {
   sellTradeTurnover: number;
 }
 
+export interface CoinankNewsItem {
+  content: string;
+  id: string;
+  readNum: number;
+  recommend: boolean;
+  sourceWeb: string;
+  title: string;
+  ts: number;
+}
+
+export interface CoinankNewsListResult {
+  items: CoinankNewsItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export interface CoinankPairSnapshot {
   fundingRateCandles: CoinankCandle[];
   liquidations: CoinankLiquidationPoint[];
   longShortRealtime: CoinankLongShortRealtimePoint;
   openInterestCandles: CoinankCandle[];
   priceCandles: CoinankCandle[];
+  refinedPriceCandles: CoinankCandle[];
   symbol: DashboardPair["symbol"];
 }
 
@@ -184,8 +233,12 @@ async function requestCoinank<T>(
   path: string,
   params: Record<string, string | number>,
   dataSchema: z.ZodType<T>,
+  options?: {
+    failureLogLevel?: "error" | "warn";
+  },
 ): Promise<T> {
   const url = new URL(path, `${config.apiBaseUrl}/`);
+  const failureLogLevel = options?.failureLogLevel ?? "error";
 
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, String(value));
@@ -218,7 +271,7 @@ async function requestCoinank<T>(
           continue;
         }
 
-        logger.error("Coinank request failed", {
+        logger[failureLogLevel]("Coinank request failed", {
           endpoint: path,
           error: message,
         });
@@ -245,7 +298,7 @@ async function requestCoinank<T>(
           continue;
         }
 
-        logger.error("Coinank responded with a non-OK status", {
+        logger[failureLogLevel]("Coinank responded with a non-OK status", {
           endpoint: path,
           status: response.status,
           statusText: response.statusText,
@@ -259,7 +312,7 @@ async function requestCoinank<T>(
         const json = (await response.json()) as unknown;
         parsed = parseEnvelope(json, dataSchema);
       } catch (error) {
-        logger.error("Coinank response parsing failed", {
+        logger[failureLogLevel]("Coinank response parsing failed", {
           endpoint: path,
           error: error instanceof Error ? error.message : String(error),
         });
@@ -269,7 +322,7 @@ async function requestCoinank<T>(
       }
 
       if (!parsed.success) {
-        logger.error("Coinank returned an unsuccessful payload", {
+        logger[failureLogLevel]("Coinank returned an unsuccessful payload", {
           code: parsed.code ?? "unknown",
           endpoint: path,
           message: parsed.msg ?? "No message provided",
@@ -289,6 +342,10 @@ async function requestCoinank<T>(
 async function fetchPriceCandles(
   config: CoinankDashboardConfig,
   symbol: DashboardPair["symbol"],
+  options?: {
+    interval?: string;
+    size?: number;
+  },
 ): Promise<CoinankCandle[]> {
   const rows = await requestCoinank(
     config,
@@ -296,9 +353,9 @@ async function fetchPriceCandles(
     {
       endTime: Date.now(),
       exchange: config.exchange,
-      interval: config.interval,
+      interval: options?.interval ?? config.interval,
       productType: config.productType,
-      size: 72,
+      size: options?.size ?? COINANK_PRICE_CANDLE_LIMIT,
       symbol,
     },
     z.array(priceRowSchema),
@@ -402,6 +459,48 @@ async function fetchLongShortRealtime(
   };
 }
 
+export async function fetchCoinankNewsList(
+  config: CoinankDashboardConfig,
+  options: {
+    importantOnly: boolean;
+    language: string;
+    pageSize: number;
+    type: "FLASH" | "NEWS";
+  },
+): Promise<CoinankNewsListResult> {
+  const payload = await requestCoinank(
+    config,
+    "/api/news/getNewsList",
+    {
+      isPopular: options.importantOnly ? "true" : "false",
+      lang: options.language,
+      page: 1,
+      pageSize: options.pageSize,
+      search: "",
+      type: options.type === "FLASH" ? "1" : "2",
+    },
+    z.object({
+      list: z.array(newsListItemSchema),
+      pagination: newsPaginationSchema,
+    }),
+  );
+
+  return {
+    items: payload.list.map((item) => ({
+      content: item.content,
+      id: item.id,
+      readNum: item.readNum,
+      recommend: item.recommend,
+      sourceWeb: item.sourceWeb,
+      title: item.title,
+      ts: item.ts,
+    })),
+    page: payload.pagination.current,
+    pageSize: payload.pagination.pageSize,
+    total: payload.pagination.total,
+  };
+}
+
 export function getCoinankDashboardConfig(): CoinankDashboardConfig | null {
   const env = coinankEnvSchema.parse(process.env);
   const apiKey = env.TRENDX_COINANK_API_KEY?.trim() ?? "";
@@ -431,12 +530,17 @@ export async function fetchCoinankPairSnapshot(
     longShortRealtime,
     openInterestCandles,
     priceCandles,
+    refinedPriceCandles,
   ] = await Promise.all([
     fetchFundingRateCandles(config, symbol),
     fetchLiquidationHistory(config, symbol),
     fetchLongShortRealtime(config, symbol),
     fetchOpenInterestCandles(config, symbol),
     fetchPriceCandles(config, symbol),
+    fetchPriceCandles(config, symbol, {
+      interval: COINANK_REFINED_PRICE_CANDLE_INTERVAL,
+      size: COINANK_REFINED_PRICE_CANDLE_LIMIT,
+    }),
   ]);
 
   return {
@@ -445,6 +549,7 @@ export async function fetchCoinankPairSnapshot(
     longShortRealtime,
     openInterestCandles,
     priceCandles,
+    refinedPriceCandles,
     symbol,
   };
 }
@@ -467,6 +572,9 @@ export async function fetchCoinankCvdBiasPct(
         type: "CVD",
       },
       z.array(cvdPointSchema),
+      {
+        failureLogLevel: "warn",
+      },
     );
 
     const latestPoint = points[points.length - 1];

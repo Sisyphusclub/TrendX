@@ -11,20 +11,20 @@ export const dashboardSectionItems = [
     label: "总览",
   },
   {
-    key: "controls",
-    label: "控制",
-  },
-  {
     key: "signals",
     label: "信号",
   },
   {
-    key: "risk",
-    label: "风险",
+    key: "journal",
+    label: "交易历史",
   },
   {
-    key: "journal",
-    label: "日志",
+    key: "risk",
+    label: "市场新闻",
+  },
+  {
+    key: "controls",
+    label: "设置",
   },
 ] as const satisfies ReadonlyArray<{
   key: DashboardSection;
@@ -40,14 +40,14 @@ export const dashboardSectionMeta: Record<
   }
 > = {
   controls: {
-    description: "入场、分段与保护边界。",
-    eyebrow: "控制",
-    title: "执行规则",
+    description: "执行纪律、账户安全与策略边界设置。",
+    eyebrow: "设置",
+    title: "策略设置",
   },
   journal: {
-    description: "调度、动作与保护记录。",
-    eyebrow: "日志",
-    title: "执行记录",
+    description: "执行、成交与调度记录。",
+    eyebrow: "交易历史",
+    title: "交易历史",
   },
   overview: {
     description: "主导交易对、信号与风控状态。",
@@ -55,9 +55,9 @@ export const dashboardSectionMeta: Record<
     title: "主控台",
   },
   risk: {
-    description: "权益、保证金与当前暴露。",
-    eyebrow: "风险",
-    title: "风险账本",
+    description: "",
+    eyebrow: "市场新闻",
+    title: "市场新闻",
   },
   signals: {
     description: "单次只看一个交易对。",

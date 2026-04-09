@@ -11,6 +11,12 @@ export const executionStatusSchema = z.enum([
   "HALTED",
 ]);
 export const positionSideSchema = z.enum(["LONG", "SHORT", "FLAT"]);
+export const entryStageStatusSchema = z.enum([
+  "LOCKED",
+  "WAITING",
+  "NEXT",
+  "TRIGGERED",
+]);
 export const confirmationKeySchema = z.enum([
   "oi",
   "cvd",
@@ -21,6 +27,8 @@ export const confirmationKeySchema = z.enum([
 ]);
 
 export const getDashboardOverviewInputSchema = z.object({});
+export const getDashboardMarketNewsInputSchema = z.object({});
+export const getDashboardExecutionHistoryInputSchema = z.object({});
 
 export const confirmationItemSchema = z.object({
   key: confirmationKeySchema,
@@ -37,6 +45,7 @@ export const orderBlockSchema = z.object({
 export const entryStageSchema = z.object({
   allocationPct: z.number(),
   plannedPrice: z.number(),
+  status: entryStageStatusSchema,
   zone: z.enum(["upper", "mid", "lower"]),
 });
 
@@ -79,9 +88,64 @@ export const accountRiskSchema = z.object({
   usedMargin: z.number(),
 });
 
+export const dashboardExecutionConfigSchema = z.object({
+  balanceAllocationPct: z.number().positive(),
+  confirmationThreshold: z.number().int().positive(),
+  leverage: z.number().positive(),
+  stageAllocations: z.array(z.number().positive()).length(3),
+});
+
+export const marketNewsCategorySchema = z.enum(["FLASH", "NEWS"]);
+export const marketNewsModeSchema = z.enum(["live", "mixed", "fallback"]);
+export const executionHistoryItemTypeSchema = z.enum([
+  "CLOSE",
+  "ENTRY",
+  "PROTECTION",
+]);
+export const executionHistoryToneSchema = z.enum([
+  "bear",
+  "blue",
+  "bull",
+  "muted",
+]);
+
+export const marketNewsItemSchema = z.object({
+  category: marketNewsCategorySchema,
+  id: z.string().min(1),
+  isImportant: z.boolean(),
+  publishedAt: z.string().datetime(),
+  readCount: z.number().int().nonnegative(),
+  source: z.string().min(1),
+  summary: z.string().min(1),
+  title: z.string().min(1),
+});
+
+export const dashboardMarketNewsSchema = z.object({
+  flashes: z.array(marketNewsItemSchema).min(1),
+  generatedAt: z.string().datetime(),
+  headlines: z.array(marketNewsItemSchema).min(1),
+  mode: marketNewsModeSchema,
+});
+
+export const dashboardExecutionHistoryItemSchema = z.object({
+  detail: z.string().min(1),
+  happenedAt: z.string().datetime(),
+  id: z.string().min(1),
+  label: z.string().min(1),
+  symbol: trackedSymbolSchema,
+  tone: executionHistoryToneSchema,
+  type: executionHistoryItemTypeSchema,
+});
+
+export const dashboardExecutionHistorySchema = z.object({
+  generatedAt: z.string().datetime(),
+  items: z.array(dashboardExecutionHistoryItemSchema),
+});
+
 export const dashboardOverviewSchema = z.object({
   accountRisk: accountRiskSchema,
   cadenceMinutes: z.number().positive(),
+  executionConfig: dashboardExecutionConfigSchema,
   generatedAt: z.string().datetime(),
   killSwitchEnabled: z.boolean(),
   operatorMode: z.literal("AUTOMATED"),
@@ -94,8 +158,37 @@ export const getDashboardOverviewOutputSchema = z.object({
   success: z.boolean(),
 });
 
+export const getDashboardMarketNewsOutputSchema = z.object({
+  marketNews: dashboardMarketNewsSchema,
+  reason: z.string().min(1),
+  success: z.boolean(),
+});
+
+export const getDashboardExecutionHistoryOutputSchema = z.object({
+  executionHistory: dashboardExecutionHistorySchema,
+  reason: z.string().min(1),
+  success: z.boolean(),
+});
+
 export type DashboardOverview = z.infer<typeof dashboardOverviewSchema>;
+export type DashboardExecutionConfig = z.infer<
+  typeof dashboardExecutionConfigSchema
+>;
 export type DashboardPair = z.infer<typeof dashboardPairSchema>;
+export type DashboardMarketNews = z.infer<typeof dashboardMarketNewsSchema>;
+export type DashboardExecutionHistory = z.infer<
+  typeof dashboardExecutionHistorySchema
+>;
+export type DashboardExecutionHistoryItem = z.infer<
+  typeof dashboardExecutionHistoryItemSchema
+>;
 export type GetDashboardOverviewOutput = z.infer<
   typeof getDashboardOverviewOutputSchema
 >;
+export type GetDashboardMarketNewsOutput = z.infer<
+  typeof getDashboardMarketNewsOutputSchema
+>;
+export type GetDashboardExecutionHistoryOutput = z.infer<
+  typeof getDashboardExecutionHistoryOutputSchema
+>;
+export type MarketNewsItem = z.infer<typeof marketNewsItemSchema>;

@@ -1,4 +1,4 @@
-import { publicProcedure } from "../../../orpc/procedures";
+import { protectedProcedure } from "../../../orpc/procedures";
 
 import { buildDashboardOverview } from "../lib/build-overview";
 import {
@@ -7,7 +7,7 @@ import {
   getDashboardOverviewOutputSchema,
 } from "../types";
 
-export const getOverview = publicProcedure
+export const getOverview = protectedProcedure
   .route({
     method: "GET",
     path: "/dashboard/overview",

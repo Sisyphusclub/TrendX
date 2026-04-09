@@ -1,6 +1,11 @@
 import type { DashboardPair } from "@trendx/api";
 
 const liveReason = "Coinank live market data loaded for dashboard pairs.";
+const binanceLiveRiskReason = "Binance USD-M Futures live account risk synced.";
+const binanceTestnetRiskReason =
+  "Binance USD-M Futures testnet account risk synced.";
+const binanceFallbackRiskReason =
+  "Binance account sync failed; account risk remains reference-only.";
 const referenceRiskReason =
   "Account risk remains reference-only until Binance execution is integrated.";
 const missingKeyReason =
@@ -11,10 +16,24 @@ const fallbackReasonPattern =
   /([A-Z]+USDT) is using seeded fallback data after a Coinank fetch failure\./;
 const liveRationalePattern =
   /([A-Z]+USDT) shows (bullish|bearish) OI-price alignment with price ([+\-\d.]+%) and open interest ([+\-\d.]+%) over the recent 12h\. (\d+)\/6 live Coinank checks are aligned, and price is (inside|outside) the preferred 1h order block\./;
+const refinedLiveRationalePattern =
+  /([A-Z]+USDT) shows (bullish|bearish) OI-price alignment with price ([+\-\d.]+%) and open interest ([+\-\d.]+%) over the recent 12h\. (\d+)\/6 live Coinank checks are aligned\. (A confirmed 1h (bullish|bearish) order block was anchored to the last (down|up) candle before a BOS close through ([\d.]+)\. The block is (fresh|already mitigated)\.|No structure-confirmed 1h order block was found, so the current zone remains reference-only\.)( The execution zone was refined on ([\d]+m)\.)? Price is (inside|outside) the tracked zone\./;
 
 export function localizeFeedReasonNote(note: string): string {
   if (note === liveReason) {
     return "Coinank 实时行情已载入当前监控交易对。";
+  }
+
+  if (note === binanceTestnetRiskReason) {
+    return "Binance U 本位合约测试网账户风险已同步。";
+  }
+
+  if (note === binanceLiveRiskReason) {
+    return "Binance U 本位合约正式账户风险已同步。";
+  }
+
+  if (note === binanceFallbackRiskReason) {
+    return "Binance 账户同步失败，当前继续使用参考风控数据。";
   }
 
   if (note === referenceRiskReason) {
@@ -49,6 +68,22 @@ export function formatRiskLabel(value: string): string {
 
   if (value === "Aligned short continuation") {
     return "顺势做空延续";
+  }
+
+  if (value === "Trend valid, structure not confirmed") {
+    return "趋势成立，结构仍待确认";
+  }
+
+  if (value === "Confirmed block already mitigated") {
+    return "订单块已被回踩消耗";
+  }
+
+  if (value === "Low conviction at confirmed zone") {
+    return "到区但确认不足";
+  }
+
+  if (value === "Waiting for confirmed zone") {
+    return "等待回到执行分段";
   }
 
   if (value === "Low conviction at the zone") {
@@ -124,6 +159,24 @@ export function formatRationale(
       liveMatch[6] === "inside" ? "已进入" : "仍在外部等待回到";
 
     return `${liveMatch[1]} 在最近 12 小时出现${directionLabel}的 OI 与价格共振，价格变化 ${liveMatch[3]}，持仓量变化 ${liveMatch[4]}。当前 ${liveMatch[5]}/6 项 Coinank 条件通过，价格${locationLabel}首选的 1 小时订单块。`;
+  }
+
+  const refinedLiveMatch = refinedLiveRationalePattern.exec(rationale);
+
+  if (refinedLiveMatch) {
+    const directionLabel = refinedLiveMatch[2] === "bullish" ? "看多" : "看空";
+    const structureLabel = refinedLiveMatch[7]
+      ? `已确认 1 小时${refinedLiveMatch[7] === "bullish" ? "看多" : "看空"}订单块，BOS 结构位 ${refinedLiveMatch[9]}，当前订单块${refinedLiveMatch[10] === "fresh" ? "仍然新鲜" : "已被回踩消耗"}`
+      : "当前还没有确认过的 1 小时订单块";
+    const refineLabel = refinedLiveMatch[12]
+      ? `，并已用 ${refinedLiveMatch[12]} 精修执行区`
+      : "";
+    const locationLabel =
+      refinedLiveMatch[13] === "inside"
+        ? "已触发分段区域"
+        : "仍在分段区域外等待";
+
+    return `${refinedLiveMatch[1]} 在最近 12 小时出现${directionLabel}的 OI 与价格共振，价格变化 ${refinedLiveMatch[3]}，持仓量变化 ${refinedLiveMatch[4]}。当前 ${refinedLiveMatch[5]}/6 项 Coinank 条件通过，${structureLabel}${refineLabel}，价格${locationLabel}。`;
   }
 
   return rationale;

@@ -76,7 +76,7 @@ shape:
 - trend-following only
 - hourly cadence
 - staged entries `30 / 40 / 30`
-- 5% balance allocation per entry
+- 10% balance allocation per entry
 - 20x leverage
 - global kill-switch visibility
 

@@ -1,0 +1,254 @@
+
+> @trendx/web@ dev C:\Users\Administrator\Desktop\TrendX\apps\web
+> next dev --turbopack "--hostname" "127.0.0.1" "--port" "3000"
+
+   ▲ Next.js 15.5.14 (Turbopack)
+   - Local:        http://127.0.0.1:3000
+   - Network:      http://127.0.0.1:3000
+
+ ✓ Starting...
+ ✓ Ready in 1414ms
+ ○ Compiling /login ...
+ ✓ Compiled /login in 7.3s
+ ⚠ ./node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.15.6_pg@8.20.0/node_modules/drizzle-orm/node-postgres
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./packages/database/src
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ GET /login 200 in 8003ms
+ ⚠ ./node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.15.6_pg@8.20.0/node_modules/drizzle-orm/node-postgres
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./packages/database/src
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ GET /login 200 in 176ms
+ ✓ Compiled in 4.5s
+ ✓ Compiled /login in 99ms
+ ⚠ ./node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.15.6_pg@8.20.0/node_modules/drizzle-orm/node-postgres
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./packages/database/src
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.15.6_pg@8.20.0/node_modules/drizzle-orm/node-postgres
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./packages/database/src
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ GET /login 200 in 422ms
+ GET /login 200 in 380ms
+ ✓ Compiled in 135ms
+ ✓ Compiled in 121ms
+ ✓ Compiled in 50ms
+ ✓ Compiled in 62ms
+ ✓ Compiled /login in 100ms
+ ⚠ ./node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.15.6_pg@8.20.0/node_modules/drizzle-orm/node-postgres
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./packages/database/src
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ GET /login 200 in 398ms
+ ○ Compiling /register ...
+ ✓ Compiled /register in 581ms
+ ⚠ ./node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.15.6_pg@8.20.0/node_modules/drizzle-orm/node-postgres
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./packages/database/src
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ GET /register 200 in 687ms
+ ○ Compiling /api/auth/[...all] ...
+ ✓ Compiled /api/auth/[...all] in 915ms
+ ⚠ ./node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.15.6_pg@8.20.0/node_modules/drizzle-orm/node-postgres
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./packages/database/src
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+2026-04-09T08:46:19.563Z ERROR [Better Auth]: Invalid origin: http://127.0.0.1:3000
+ POST /api/auth/sign-up/email 403 in 2324ms
+ ✓ Compiled in 55ms
+ ✓ Compiled in 52ms
+ ✓ Compiled in 59ms
+ ✓ Compiled in 221ms
+ ✓ Compiled /register in 84ms
+ ⚠ ./node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.15.6_pg@8.20.0/node_modules/drizzle-orm/node-postgres
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./packages/database/src
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ GET /register 200 in 449ms
+ ⚠ ./node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.15.6_pg@8.20.0/node_modules/drizzle-orm/node-postgres
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./node_modules/.pnpm/pg-pool@3.13.0_pg@8.20.0/node_modules/pg-pool
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ ⚠ ./packages/database/src
+Package pg can't be external
+The request pg matches serverExternalPackages (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running npm install pg from the project directory.
+
+
+ GET /register 200 in 129ms
