@@ -115,7 +115,7 @@ export function CommandDeck({
                 订单块中位
               </p>
               <p className="mt-1.5 text-[15px] font-semibold text-[color:var(--color-ink)]">
-                {formatUsd(dominantPair.orderBlock.mid)}
+                {formatUsd(dominantPair.mainOrderBlock.mid)}
               </p>
             </div>
             <div className="rounded-[16px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-3 py-2.5">

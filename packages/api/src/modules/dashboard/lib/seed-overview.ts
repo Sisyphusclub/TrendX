@@ -46,9 +46,13 @@ function buildPair(params: {
   executionStatus: DashboardPair["executionStatus"];
   fundingRate: number;
   lastPrice: number;
+  mainOrderBlock: DashboardPair["mainOrderBlock"];
+  mainOrderBlockDirection: DashboardPair["mainOrderBlockDirection"];
   markPrice: number;
   oiDeltaPct: number;
   orderBlock: DashboardPair["orderBlock"];
+  previousOppositeOrderBlock: DashboardPair["previousOppositeOrderBlock"];
+  previousOppositeOrderBlockDirection: DashboardPair["previousOppositeOrderBlockDirection"];
   rationale: string;
   riskLabel: string;
   side: DashboardPair["currentPosition"]["side"];
@@ -76,9 +80,14 @@ function buildPair(params: {
     executionStatus: params.executionStatus,
     fundingRate: params.fundingRate,
     lastPrice: params.lastPrice,
+    mainOrderBlock: params.mainOrderBlock,
+    mainOrderBlockDirection: params.mainOrderBlockDirection,
     markPrice: params.markPrice,
     openInterestDeltaPct: params.oiDeltaPct,
     orderBlock: params.orderBlock,
+    previousOppositeOrderBlock: params.previousOppositeOrderBlock,
+    previousOppositeOrderBlockDirection:
+      params.previousOppositeOrderBlockDirection,
     rationale: params.rationale,
     riskLabel: params.riskLabel,
     stopLoss: params.stopLoss,
@@ -118,6 +127,12 @@ export function buildSeededDashboardPair(
       executionStatus: "ARMED",
       fundingRate: 0.012,
       lastPrice: 68412,
+      mainOrderBlock: {
+        high: 68240,
+        low: 67730,
+        mid: 67980,
+      },
+      mainOrderBlockDirection: "BULLISH",
       markPrice: 68437,
       oiDeltaPct: 5.7,
       orderBlock: {
@@ -125,6 +140,12 @@ export function buildSeededDashboardPair(
         low: 67730,
         mid: 67980,
       },
+      previousOppositeOrderBlock: {
+        high: 69160,
+        low: 68620,
+        mid: 68890,
+      },
+      previousOppositeOrderBlockDirection: "BEARISH",
       rationale:
         "BTC is maintaining a bullish OI-price expansion and price is rotating back into the nearest 1h long order block.",
       riskLabel: "Aligned long continuation",
@@ -161,6 +182,12 @@ export function buildSeededDashboardPair(
     executionStatus: "PENDING",
     fundingRate: 0.021,
     lastPrice: 3558,
+    mainOrderBlock: {
+      high: 3524,
+      low: 3472,
+      mid: 3496,
+    },
+    mainOrderBlockDirection: "BULLISH",
     markPrice: 3552,
     oiDeltaPct: -1.4,
     orderBlock: {
@@ -168,6 +195,12 @@ export function buildSeededDashboardPair(
       low: 3472,
       mid: 3496,
     },
+    previousOppositeOrderBlock: {
+      high: 3628,
+      low: 3568,
+      mid: 3598,
+    },
+    previousOppositeOrderBlockDirection: "BEARISH",
     rationale:
       "ETH has not completed enough confirmation checks after revisiting the zone, so the engine stays flat and waits.",
     riskLabel: "Low conviction, no chase",

@@ -36,7 +36,7 @@ function loadWorkspaceEnv(): void {
 loadWorkspaceEnv();
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@trendx/api", "@trendx/logs"],
+  transpilePackages: ["@trendx/api", "@trendx/database", "@trendx/logs"],
   typedRoutes: true,
 };
 

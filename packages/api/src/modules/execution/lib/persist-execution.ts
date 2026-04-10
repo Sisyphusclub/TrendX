@@ -5,6 +5,11 @@ import { and, desc, eq, inArray } from "@trendx/database/drizzle/operators";
 import { logger } from "@trendx/logs";
 
 import { getDatabaseClient } from "../../../lib/database";
+import {
+  getCycleCapturedAt,
+  getSignalTimeframe,
+  persistDashboardPairSignalSnapshot,
+} from "../../dashboard/lib/run-signal-cycle";
 import type {
   DashboardExecutionConfig,
   DashboardPair,
@@ -23,7 +28,6 @@ const ACTIVE_PLAN_STATUSES = [
   "PROTECTED",
   "HALTED",
 ] as const;
-const DEFAULT_TIMEFRAME = "1h";
 
 interface PersistEntryExecutionParams {
   account: BinanceAccountInformation;
@@ -103,16 +107,6 @@ function getTrackedPositionSide(
   return "FLAT";
 }
 
-function getChecklistScore(
-  pair: DashboardPair,
-  key: DashboardPair["checklist"][number]["key"],
-): string {
-  const matched =
-    pair.checklist.find((item) => item.key === key)?.matched ?? false;
-
-  return matched ? "100.00" : "0.00";
-}
-
 function buildAccountSnapshotInsert(
   account: BinanceAccountInformation,
   capturedAt: Date,
@@ -154,6 +148,10 @@ export async function persistEntryExecution(
   }
 
   const capturedAt = getCapturedAt(params.overviewGeneratedAt);
+  const cycleCapturedAt = getCycleCapturedAt(
+    params.overviewGeneratedAt,
+    getSignalTimeframe(),
+  );
   const stageIndex = params.pair.entryStages.findIndex(
     (stage) => stage.zone === params.stageZone,
   );
@@ -169,81 +167,51 @@ export async function persistEntryExecution(
     orderAveragePrice: params.order.averagePrice,
     positionEntryPrice: params.position.entryPrice,
   });
+  const [activePlan] = await db
+    .select({
+      id: schema.executionPlans.id,
+      signalId: schema.executionPlans.signalId,
+    })
+    .from(schema.executionPlans)
+    .where(
+      and(
+        eq(schema.executionPlans.symbol, params.pair.symbol),
+        inArray(schema.executionPlans.status, [...ACTIVE_PLAN_STATUSES]),
+      ),
+    )
+    .orderBy(desc(schema.executionPlans.updatedAt))
+    .limit(1);
+  const persistedSignal = activePlan
+    ? null
+    : await persistDashboardPairSignalSnapshot({
+        capturedAt: cycleCapturedAt,
+        overviewGeneratedAt: params.overviewGeneratedAt,
+        overviewReason: params.overviewReason,
+        pair: params.pair,
+        timeframe: getSignalTimeframe(),
+      });
 
   try {
     await db.transaction(async (tx) => {
-      const [activePlan] = await tx
-        .select({
-          id: schema.executionPlans.id,
-          signalId: schema.executionPlans.signalId,
-        })
-        .from(schema.executionPlans)
-        .where(
-          and(
-            eq(schema.executionPlans.symbol, params.pair.symbol),
-            inArray(schema.executionPlans.status, [...ACTIVE_PLAN_STATUSES]),
-          ),
-        )
-        .orderBy(desc(schema.executionPlans.updatedAt))
-        .limit(1);
-
       const planId = activePlan?.id ?? randomUUID();
-      const signalId = activePlan?.signalId ?? randomUUID();
+      const signalId = activePlan?.signalId ?? persistedSignal?.signalId;
       const positionId = `position:${planId}`;
 
+      if (!activePlan && !signalId) {
+        throw new Error(
+          `Signal snapshot was not available for ${params.pair.symbol} execution persistence.`,
+        );
+      }
+
+      const resolvedSignalId = signalId ?? activePlan?.signalId;
+
+      if (!resolvedSignalId) {
+        throw new Error(
+          `Signal identifier was not available for ${params.pair.symbol} execution persistence.`,
+        );
+      }
+
       if (!activePlan) {
-        const snapshotId = randomUUID();
-
-        await tx.insert(schema.marketSnapshots).values({
-          aggressiveFlowScore: getChecklistScore(params.pair, "aggressiveFlow"),
-          capturedAt,
-          cvdBiasPct: toNumericString(params.pair.cvdBiasPct, 2),
-          fundingRate: toNumericString(params.pair.fundingRate, 4),
-          id: snapshotId,
-          largeOrderScore: getChecklistScore(params.pair, "largeOrders"),
-          lastPrice: toNumericString(params.pair.lastPrice, 4),
-          liquidationSweepScore: getChecklistScore(
-            params.pair,
-            "liquidationSweep",
-          ),
-          openInterestDeltaPct: toNumericString(
-            params.pair.openInterestDeltaPct,
-            2,
-          ),
-          rawPayload: {
-            executionConfig: params.executionConfig,
-            overviewReason: params.overviewReason,
-            pair: params.pair,
-          },
-          symbol: params.pair.symbol,
-          timeframe:
-            process.env.TRENDX_SIGNAL_INTERVAL?.trim() || DEFAULT_TIMEFRAME,
-        });
-
-        await tx.insert(schema.tradingSignals).values({
-          action: params.pair.action,
-          checklist: params.pair.checklist.map((item) => ({
-            key: item.key,
-            label: item.label,
-            matched: item.matched,
-          })),
-          confirmationCount: params.pair.confirmationCount,
-          confirmationThreshold: params.pair.confirmationThreshold,
-          createdAt: capturedAt,
-          direction: params.pair.trendDirection,
-          id: signalId,
-          orderBlockHigh: toNumericString(params.pair.orderBlock.high, 4),
-          orderBlockLow: toNumericString(params.pair.orderBlock.low, 4),
-          rationale: params.pair.rationale,
-          snapshotId,
-          stopLoss: toNumericString(params.pair.stopLoss, 4),
-          symbol: params.pair.symbol,
-          takeProfitOne: toNumericString(params.pair.takeProfitOne, 4),
-          takeProfitTwo: toNumericString(params.pair.takeProfitTwo, 4),
-          timeframe:
-            process.env.TRENDX_SIGNAL_INTERVAL?.trim() || DEFAULT_TIMEFRAME,
-        });
-
         await tx.insert(schema.executionPlans).values({
           balanceFractionPct: toNumericString(
             params.executionConfig.balanceAllocationPct,
@@ -253,7 +221,7 @@ export async function persistEntryExecution(
           id: planId,
           leverage: params.executionConfig.leverage,
           side: params.position.side,
-          signalId,
+          signalId: resolvedSignalId,
           status: planStatus,
           symbol: params.pair.symbol,
           tranchePlan: params.pair.entryStages.map((stage) => ({

@@ -524,24 +524,36 @@ export async function fetchCoinankPairSnapshot(
   config: CoinankDashboardConfig,
   symbol: DashboardPair["symbol"],
 ): Promise<CoinankPairSnapshot> {
+  const refinedPriceCandlesPromise = fetchPriceCandles(config, symbol, {
+    interval: COINANK_REFINED_PRICE_CANDLE_INTERVAL,
+    size: COINANK_REFINED_PRICE_CANDLE_LIMIT,
+  }).catch((error) => {
+    logger.warn(
+      "Coinank refined price candles unavailable; using primary interval",
+      {
+        error: error instanceof Error ? error.message : String(error),
+        interval: COINANK_REFINED_PRICE_CANDLE_INTERVAL,
+        symbol,
+      },
+    );
+
+    return null;
+  });
   const [
     fundingRateCandles,
     liquidations,
     longShortRealtime,
     openInterestCandles,
     priceCandles,
-    refinedPriceCandles,
   ] = await Promise.all([
     fetchFundingRateCandles(config, symbol),
     fetchLiquidationHistory(config, symbol),
     fetchLongShortRealtime(config, symbol),
     fetchOpenInterestCandles(config, symbol),
     fetchPriceCandles(config, symbol),
-    fetchPriceCandles(config, symbol, {
-      interval: COINANK_REFINED_PRICE_CANDLE_INTERVAL,
-      size: COINANK_REFINED_PRICE_CANDLE_LIMIT,
-    }),
   ]);
+  const refinedPriceCandles =
+    (await refinedPriceCandlesPromise) ?? priceCandles;
 
   return {
     fundingRateCandles,

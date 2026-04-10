@@ -55,12 +55,41 @@ Complete this checklist before committing frontend code changes.
 - [ ] Components follow single responsibility principle
 - [ ] File and function names follow conventions
 - [ ] Barrel exports updated if new files added
+- [ ] UI copy does not add extra explanatory text beyond the task-critical label, status, or action
 
 ## Documentation
 
 - [ ] Complex logic has inline comments
 - [ ] New hooks have JSDoc comments
 - [ ] API changes reflected in backend documentation
+
+## UX Copy Convention
+
+### Convention: Keep Interface Copy Minimal
+
+**What**: In TrendX UI, avoid extra explanatory copy unless the text is required for a trading decision, a blocking error, or a necessary operator action.
+
+**Why**: The product is meant to stay dense and operational. Extra helper sentences, descriptive filler, and decorative explanations make the dashboard harder to scan.
+
+**Good**
+
+```tsx
+<p>主订单块</p>
+<p>上一反向块</p>
+<p>允许执行</p>
+```
+
+**Bad**
+
+```tsx
+<p>这里展示的是系统根据当前市场结构推导出的主订单块区域，供你参考决策。</p>
+<p>当系统判断风险可控时，这里会提示你可以继续执行下一步操作。</p>
+```
+
+**Rule**:
+- Prefer labels, statuses, and numbers over explanatory paragraphs
+- Only show extra copy for hard blockers, irreversible actions, or risk-critical warnings
+- If a section works without the sentence, remove the sentence
 
 ---
 

@@ -32,6 +32,7 @@ const DISPLACEMENT_BODY_MULTIPLIER = 1.2;
 const DISPLACEMENT_RANGE_MULTIPLIER = 1.1;
 const DISPLACEMENT_CLOSE_LOCATION_THRESHOLD = 0.65;
 const STRUCTURE_BREAK_BUFFER_PCT = 0.08;
+const RECENT_BASE_ORDER_BLOCK_SEARCH_WINDOW = 18;
 const ORDER_BLOCK_REFINEMENT_INTERVAL = "15m";
 const ORDER_BLOCK_REFINEMENT_LOOKAHEAD = 8;
 const ORDER_BLOCK_REFINEMENT_CONTEXT = 4;
@@ -60,13 +61,16 @@ const ENTRY_STAGE_BLUEPRINTS = [
   zone: DashboardPair["entryStages"][number]["zone"];
 }>;
 
+type OrderBlockDirection = Exclude<DashboardPair["trendDirection"], "NEUTRAL">;
+
 interface OrderBlockCandidate {
   breakBegin: number;
   breakIndex: number;
+  direction: OrderBlockDirection;
   isFresh: boolean;
   orderBlock: DashboardPair["orderBlock"];
   refinementInterval: string | null;
-  source: "fallback" | "structure";
+  source: "fallback" | "recentBase" | "structure";
   sourceBegin: number;
   sourceIndex: number;
   structureLevel: number | null;
@@ -75,6 +79,11 @@ interface OrderBlockCandidate {
 interface SwingPoint {
   index: number;
   price: number;
+}
+
+interface PreviousOppositeOrderBlockResult {
+  direction: OrderBlockDirection;
+  orderBlock: DashboardPair["orderBlock"];
 }
 
 interface EntryPlanResult {
@@ -112,6 +121,14 @@ function getCandleRange(candle: CoinankCandle): number {
 
 function getCandleBodySize(candle: CoinankCandle): number {
   return Math.abs(candle.close - candle.open);
+}
+
+function getCandleBodyHigh(candle: CoinankCandle): number {
+  return Math.max(candle.open, candle.close);
+}
+
+function getCandleBodyLow(candle: CoinankCandle): number {
+  return Math.min(candle.open, candle.close);
 }
 
 function getLatestCandle(candles: CoinankCandle[]): CoinankCandle | null {
@@ -392,10 +409,10 @@ function hasDisplacement(
 function buildOrderBlockFromCandle(
   symbol: DashboardPair["symbol"],
   candle: CoinankCandle,
-  trendDirection: DashboardPair["trendDirection"],
+  trendDirection: OrderBlockDirection,
 ): DashboardPair["orderBlock"] {
-  const bodyHigh = Math.max(candle.open, candle.close);
-  const bodyLow = Math.min(candle.open, candle.close);
+  const bodyHigh = getCandleBodyHigh(candle);
+  const bodyLow = getCandleBodyLow(candle);
   const high =
     trendDirection === "BEARISH" ? candle.high : Math.max(bodyHigh, bodyLow);
   const low =
@@ -410,31 +427,13 @@ function buildOrderBlockFromCandle(
   };
 }
 
-function buildFallbackOrderBlockCandidate(
+function buildOrderBlockFromBaseCandles(
   symbol: DashboardPair["symbol"],
   candles: CoinankCandle[],
-  trendDirection: DashboardPair["trendDirection"],
-): OrderBlockCandidate {
-  const completedCandles = getCompletedCandles(candles);
-  const searchWindow = getRecentCandles(completedCandles, 12).slice().reverse();
-  const selectedCandle = searchWindow.find((candle) => {
-    if (trendDirection === "BULLISH") {
-      return candle.close < candle.open;
-    }
-
-    if (trendDirection === "BEARISH") {
-      return candle.close > candle.open;
-    }
-
-    return false;
-  });
-  const fallbackCandle =
-    selectedCandle ??
-    getLatestCandle(completedCandles) ??
-    getLatestCandle(candles);
-
-  if (!fallbackCandle) {
-    const emptyOrderBlock = buildOrderBlockFromCandle(
+  trendDirection: OrderBlockDirection,
+): DashboardPair["orderBlock"] {
+  if (!candles.length) {
+    return buildOrderBlockFromCandle(
       symbol,
       {
         begin: 0,
@@ -443,14 +442,91 @@ function buildFallbackOrderBlockCandidate(
         low: 0,
         open: 0,
       },
-      "BULLISH",
+      trendDirection,
     );
+  }
 
+  const high =
+    trendDirection === "BULLISH"
+      ? Math.max(...candles.map(getCandleBodyHigh))
+      : Math.max(...candles.map((candle) => candle.high));
+  const low =
+    trendDirection === "BULLISH"
+      ? Math.min(...candles.map((candle) => candle.low))
+      : Math.min(...candles.map(getCandleBodyLow));
+
+  return {
+    high: roundPrice(symbol, high),
+    low: roundPrice(symbol, low),
+    mid: roundPrice(symbol, (high + low) / 2),
+  };
+}
+
+function buildFullRangeOrderBlockFromCandle(
+  symbol: DashboardPair["symbol"],
+  candle: CoinankCandle,
+): DashboardPair["orderBlock"] {
+  return {
+    high: roundPrice(symbol, candle.high),
+    low: roundPrice(symbol, candle.low),
+    mid: roundPrice(symbol, (candle.high + candle.low) / 2),
+  };
+}
+
+function isDirectionalCandle(
+  candle: CoinankCandle,
+  trendDirection: OrderBlockDirection,
+): boolean {
+  if (trendDirection === "BULLISH") {
+    return candle.close > candle.open;
+  }
+
+  return candle.close < candle.open;
+}
+
+function isBaseOrderBlockCandle(
+  candle: CoinankCandle,
+  trendDirection: OrderBlockDirection,
+): boolean {
+  if (trendDirection === "BULLISH") {
+    return candle.close <= candle.open;
+  }
+
+  return candle.close >= candle.open;
+}
+
+function buildSingleCandleFallbackOrderBlockCandidate(
+  symbol: DashboardPair["symbol"],
+  candles: CoinankCandle[],
+  trendDirection: OrderBlockDirection,
+): OrderBlockCandidate {
+  const completedCandles = getCompletedCandles(candles);
+  const searchWindow = getRecentCandles(completedCandles, 12).slice().reverse();
+  const selectedCandle = searchWindow.find((candle) =>
+    isBaseOrderBlockCandle(candle, trendDirection),
+  );
+  const fallbackCandle =
+    selectedCandle ??
+    getLatestCandle(completedCandles) ??
+    getLatestCandle(candles);
+
+  if (!fallbackCandle) {
     return {
       breakBegin: 0,
       breakIndex: 0,
+      direction: trendDirection,
       isFresh: false,
-      orderBlock: emptyOrderBlock,
+      orderBlock: buildOrderBlockFromCandle(
+        symbol,
+        {
+          begin: 0,
+          close: 0,
+          high: 0,
+          low: 0,
+          open: 0,
+        },
+        trendDirection,
+      ),
       refinementInterval: null,
       source: "fallback",
       sourceBegin: 0,
@@ -464,11 +540,12 @@ function buildFallbackOrderBlockCandidate(
   return {
     breakBegin: fallbackCandle.begin,
     breakIndex: Math.max(sourceIndex, 0),
+    direction: trendDirection,
     isFresh: false,
     orderBlock: buildOrderBlockFromCandle(
       symbol,
       fallbackCandle,
-      trendDirection === "NEUTRAL" ? "BULLISH" : trendDirection,
+      trendDirection,
     ),
     refinementInterval: null,
     source: "fallback",
@@ -476,6 +553,77 @@ function buildFallbackOrderBlockCandidate(
     sourceIndex: Math.max(sourceIndex, 0),
     structureLevel: null,
   };
+}
+
+function buildRecentBaseOrderBlockCandidate(
+  symbol: DashboardPair["symbol"],
+  candles: CoinankCandle[],
+  trendDirection: OrderBlockDirection,
+): OrderBlockCandidate | null {
+  const completedCandles = getCompletedCandles(candles);
+  const searchWindowStart = Math.max(
+    completedCandles.length - RECENT_BASE_ORDER_BLOCK_SEARCH_WINDOW,
+    1,
+  );
+
+  for (
+    let index = completedCandles.length - 1;
+    index >= searchWindowStart;
+    index -= 1
+  ) {
+    const reactionCandle = completedCandles[index];
+    const previousCandle = completedCandles[index - 1];
+
+    if (
+      !reactionCandle ||
+      !previousCandle ||
+      !hasDisplacement(completedCandles, index, trendDirection) ||
+      !isDirectionalCandle(reactionCandle, trendDirection) ||
+      !isBaseOrderBlockCandle(previousCandle, trendDirection)
+    ) {
+      continue;
+    }
+
+    const baseCandles: CoinankCandle[] = [previousCandle];
+    let baseStartIndex = index - 1;
+
+    for (
+      let baseIndex = index - 2;
+      baseIndex >= searchWindowStart - 1;
+      baseIndex -= 1
+    ) {
+      const candle = completedCandles[baseIndex];
+
+      if (!candle || !isBaseOrderBlockCandle(candle, trendDirection)) {
+        break;
+      }
+
+      baseCandles.unshift(candle);
+      baseStartIndex = baseIndex;
+    }
+
+    const orderBlock = buildOrderBlockFromBaseCandles(
+      symbol,
+      baseCandles,
+      trendDirection,
+    );
+
+    return {
+      breakBegin: reactionCandle.begin,
+      breakIndex: index,
+      direction: trendDirection,
+      isFresh: !wasOrderBlockRetested(completedCandles, index, orderBlock),
+      orderBlock,
+      refinementInterval: null,
+      source: "recentBase",
+      sourceBegin:
+        completedCandles[baseStartIndex]?.begin ?? previousCandle.begin,
+      sourceIndex: baseStartIndex,
+      structureLevel: null,
+    };
+  }
+
+  return null;
 }
 
 function findOrderBlockSourceIndex(
@@ -531,13 +679,13 @@ function wasOrderBlockRetested(
 function selectStructuredOrderBlock(
   symbol: DashboardPair["symbol"],
   candles: CoinankCandle[],
-  trendDirection: DashboardPair["trendDirection"],
+  trendDirection: OrderBlockDirection,
 ): OrderBlockCandidate | null {
   const completedCandles = getCompletedCandles(candles);
 
   if (
-    trendDirection === "NEUTRAL" ||
-    completedCandles.length < SWING_STRENGTH * 2 + DISPLACEMENT_LOOKBACK + 2
+    completedCandles.length <
+    SWING_STRENGTH * 2 + DISPLACEMENT_LOOKBACK + 2
   ) {
     return null;
   }
@@ -598,6 +746,7 @@ function selectStructuredOrderBlock(
     return {
       breakBegin: breakCandle.begin,
       breakIndex: index,
+      direction: trendDirection,
       isFresh: !wasOrderBlockRetested(completedCandles, index, orderBlock),
       orderBlock,
       refinementInterval: null,
@@ -611,15 +760,200 @@ function selectStructuredOrderBlock(
   return null;
 }
 
+function getOrderBlockDistanceFromPrice(
+  orderBlock: DashboardPair["orderBlock"],
+  latestPrice: number,
+): number {
+  if (latestPrice < orderBlock.low) {
+    return orderBlock.low - latestPrice;
+  }
+
+  if (latestPrice > orderBlock.high) {
+    return latestPrice - orderBlock.high;
+  }
+
+  return 0;
+}
+
+function choosePreferredOrderBlockCandidate(
+  candidates: OrderBlockCandidate[],
+  latestPrice: number,
+): OrderBlockCandidate | null {
+  let selectedCandidate: OrderBlockCandidate | null = null;
+
+  for (const candidate of candidates) {
+    if (!selectedCandidate) {
+      selectedCandidate = candidate;
+      continue;
+    }
+
+    const candidateDistance = getOrderBlockDistanceFromPrice(
+      candidate.orderBlock,
+      latestPrice,
+    );
+    const selectedDistance = getOrderBlockDistanceFromPrice(
+      selectedCandidate.orderBlock,
+      latestPrice,
+    );
+
+    if (candidateDistance < selectedDistance) {
+      selectedCandidate = candidate;
+      continue;
+    }
+
+    if (
+      candidateDistance === selectedDistance &&
+      candidate.source === "structure" &&
+      selectedCandidate.source !== "structure"
+    ) {
+      selectedCandidate = candidate;
+      continue;
+    }
+
+    if (
+      candidateDistance === selectedDistance &&
+      candidate.sourceBegin > selectedCandidate.sourceBegin
+    ) {
+      selectedCandidate = candidate;
+    }
+  }
+
+  return selectedCandidate;
+}
+
+function chooseMostRecentOrderBlockCandidate(
+  candidates: OrderBlockCandidate[],
+): OrderBlockCandidate | null {
+  let selectedCandidate: OrderBlockCandidate | null = null;
+
+  for (const candidate of candidates) {
+    if (
+      !selectedCandidate ||
+      candidate.sourceBegin > selectedCandidate.sourceBegin
+    ) {
+      selectedCandidate = candidate;
+      continue;
+    }
+
+    if (
+      candidate.sourceBegin === selectedCandidate.sourceBegin &&
+      candidate.source === "structure" &&
+      selectedCandidate.source !== "structure"
+    ) {
+      selectedCandidate = candidate;
+    }
+  }
+
+  return selectedCandidate;
+}
+
+function selectDirectionalOrderBlockCandidate(
+  symbol: DashboardPair["symbol"],
+  candles: CoinankCandle[],
+  trendDirection: OrderBlockDirection,
+  latestPrice: number,
+): OrderBlockCandidate {
+  const structuredCandidate = selectStructuredOrderBlock(
+    symbol,
+    candles,
+    trendDirection,
+  );
+  const recentBaseCandidate = buildRecentBaseOrderBlockCandidate(
+    symbol,
+    candles,
+    trendDirection,
+  );
+  const preferredCandidate = choosePreferredOrderBlockCandidate(
+    [structuredCandidate, recentBaseCandidate].filter(
+      (candidate): candidate is OrderBlockCandidate => candidate !== null,
+    ),
+    latestPrice,
+  );
+
+  return (
+    preferredCandidate ??
+    buildSingleCandleFallbackOrderBlockCandidate(
+      symbol,
+      candles,
+      trendDirection,
+    )
+  );
+}
+
 function selectOrderBlockCandidate(
   symbol: DashboardPair["symbol"],
   candles: CoinankCandle[],
   trendDirection: DashboardPair["trendDirection"],
+  latestPrice: number,
 ): OrderBlockCandidate {
-  return (
-    selectStructuredOrderBlock(symbol, candles, trendDirection) ??
-    buildFallbackOrderBlockCandidate(symbol, candles, trendDirection)
+  if (trendDirection === "NEUTRAL") {
+    const neutralCandidates = [
+      selectStructuredOrderBlock(symbol, candles, "BULLISH"),
+      buildRecentBaseOrderBlockCandidate(symbol, candles, "BULLISH"),
+      selectStructuredOrderBlock(symbol, candles, "BEARISH"),
+      buildRecentBaseOrderBlockCandidate(symbol, candles, "BEARISH"),
+    ].filter(
+      (candidate): candidate is OrderBlockCandidate => candidate !== null,
+    );
+    const neutralCandidate =
+      chooseMostRecentOrderBlockCandidate(neutralCandidates);
+
+    if (neutralCandidate) {
+      return neutralCandidate;
+    }
+
+    return buildSingleCandleFallbackOrderBlockCandidate(
+      symbol,
+      candles,
+      "BULLISH",
+    );
+  }
+
+  return selectDirectionalOrderBlockCandidate(
+    symbol,
+    candles,
+    trendDirection,
+    latestPrice,
   );
+}
+
+function getOppositeOrderBlockDirection(
+  direction: OrderBlockDirection,
+): OrderBlockDirection {
+  return direction === "BULLISH" ? "BEARISH" : "BULLISH";
+}
+
+function selectPreviousOppositeOrderBlock(
+  symbol: DashboardPair["symbol"],
+  candles: CoinankCandle[],
+  mainOrderBlockCandidate: OrderBlockCandidate,
+): PreviousOppositeOrderBlockResult | null {
+  const completedCandles = getCompletedCandles(candles);
+  const oppositeDirection = getOppositeOrderBlockDirection(
+    mainOrderBlockCandidate.direction,
+  );
+  const latestSearchIndex = Math.min(
+    mainOrderBlockCandidate.sourceIndex - 1,
+    completedCandles.length - 1,
+  );
+
+  for (let index = latestSearchIndex; index >= 0; index -= 1) {
+    const candle = completedCandles[index];
+
+    if (
+      !candle ||
+      !hasDisplacement(completedCandles, index, oppositeDirection)
+    ) {
+      continue;
+    }
+
+    return {
+      direction: oppositeDirection,
+      orderBlock: buildFullRangeOrderBlockFromCandle(symbol, candle),
+    };
+  }
+
+  return null;
 }
 
 function overlapsOrderBlock(
@@ -712,7 +1046,7 @@ function findLowerTimeframeBreakIndex(
 function refineOrderBlockCandidate(
   symbol: DashboardPair["symbol"],
   lowerTimeframeCandles: CoinankCandle[],
-  trendDirection: DashboardPair["trendDirection"],
+  trendDirection: OrderBlockDirection,
   candidate: OrderBlockCandidate,
   higherIntervalDurationMs: number,
 ): OrderBlockCandidate {
@@ -1118,12 +1452,14 @@ function buildRationale(params: {
   trendDirection: DashboardPair["trendDirection"];
 }): string {
   if (params.trendDirection === "NEUTRAL") {
-    return `${params.symbol} is not showing the required OI-price expansion on the 1h feed, so TrendX keeps the desk flat and waits.`;
+    return `${params.symbol} is not showing the required OI-price expansion on the 1h feed, so TrendX keeps the desk flat and waits while tracking the latest ${params.orderBlockCandidate.direction === "BULLISH" ? "bullish" : "bearish"} main order block.`;
   }
 
   const structureSentence = params.hasConfirmedStructure
     ? `A confirmed 1h ${params.trendDirection === "BULLISH" ? "bullish" : "bearish"} order block was anchored to the last ${params.trendDirection === "BULLISH" ? "down" : "up"} candle before a BOS close through ${params.orderBlockCandidate.structureLevel?.toFixed(2) ?? "structure"}. The block is ${params.isFresh ? "fresh" : "already mitigated"}.`
-    : "No structure-confirmed 1h order block was found, so the current zone remains reference-only.";
+    : params.orderBlockCandidate.source === "recentBase"
+      ? `TrendX is tracking the nearest 1h ${params.trendDirection === "BULLISH" ? "demand" : "supply"} base at the latest pullback, but price has not printed a structure-confirmed block yet.`
+      : "No structure-confirmed 1h order block was found, so the current zone remains reference-only.";
   const refinementSentence =
     params.orderBlockCandidate.refinementInterval === null
       ? ""
@@ -1187,15 +1523,25 @@ async function buildLiveDashboardPair(
     snapshot.symbol,
     snapshot.priceCandles,
     trendDirection,
+    latestExecutionPrice,
   );
+  const orderBlockDirection =
+    trendDirection === "NEUTRAL"
+      ? higherTimeframeOrderBlockCandidate.direction
+      : trendDirection;
   const orderBlockCandidate = refineOrderBlockCandidate(
     snapshot.symbol,
     snapshot.refinedPriceCandles,
-    trendDirection,
+    orderBlockDirection,
     higherTimeframeOrderBlockCandidate,
     getIntervalDurationMs(config.interval),
   );
-  const orderBlock = orderBlockCandidate.orderBlock;
+  const mainOrderBlock = orderBlockCandidate.orderBlock;
+  const previousOppositeOrderBlock = selectPreviousOppositeOrderBlock(
+    snapshot.symbol,
+    snapshot.priceCandles,
+    orderBlockCandidate,
+  );
   const hasConfirmedStructure = orderBlockCandidate.source === "structure";
   const oiMatched =
     trendDirection !== "NEUTRAL" && oiChangePct > OI_CONFIRMATION_THRESHOLD_PCT;
@@ -1226,18 +1572,19 @@ async function buildLiveDashboardPair(
   ];
   const confirmationCount = confirmationMatches.filter(Boolean).length;
   const entryConditionsMet =
+    trendDirection !== "NEUTRAL" &&
     hasConfirmedStructure &&
     orderBlockCandidate.isFresh &&
     confirmationCount >= CONFIRMATION_THRESHOLD;
   const entryPlan = buildEntryPlan(
-    orderBlock,
+    mainOrderBlock,
     trendDirection,
     latestExecutionPrice,
     entryConditionsMet,
   );
   const inOrderBlockRange =
     entryPlan.triggeredStageCount > 0 &&
-    isInOrderBlockRange(orderBlock, latestExecutionPrice);
+    isInOrderBlockRange(mainOrderBlock, latestExecutionPrice);
   const action: DashboardPair["action"] =
     trendDirection !== "NEUTRAL" &&
     entryConditionsMet &&
@@ -1257,8 +1604,8 @@ async function buildLiveDashboardPair(
   const protectionTargets = buildProtectionTargets(
     snapshot.symbol,
     snapshot.priceCandles,
-    orderBlock,
-    trendDirection,
+    mainOrderBlock,
+    orderBlockDirection,
     latestExecutionPrice,
   );
   const rationale = buildRationale({
@@ -1289,9 +1636,14 @@ async function buildLiveDashboardPair(
     executionStatus,
     fundingRate: Number(fundingRatePct.toFixed(4)),
     lastPrice: roundPrice(snapshot.symbol, latestExecutionPrice),
+    mainOrderBlock,
+    mainOrderBlockDirection: orderBlockDirection,
     markPrice: roundPrice(snapshot.symbol, latestExecutionPrice),
     openInterestDeltaPct: Number(oiChangePct.toFixed(2)),
-    orderBlock,
+    orderBlock: mainOrderBlock,
+    previousOppositeOrderBlock: previousOppositeOrderBlock?.orderBlock ?? null,
+    previousOppositeOrderBlockDirection:
+      previousOppositeOrderBlock?.direction ?? null,
     rationale,
     riskLabel,
     stopLoss: protectionTargets.stopLoss,

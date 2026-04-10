@@ -12,6 +12,7 @@ import {
 
 import { authClient } from "@/lib/auth-client";
 
+import { formatAuthErrorMessage } from "../lib/error-messages";
 import { authPrimaryButtonClassName } from "../lib/styles";
 import { AuthField } from "./AuthField";
 
@@ -42,23 +43,30 @@ export function RegisterForm(): ReactElement {
 
     setIsPending(true);
 
-    const { error } = await authClient.signUp.email({
-      email,
-      name,
-      password,
-    });
+    try {
+      const { error } = await authClient.signUp.email({
+        email,
+        name,
+        password,
+      });
 
-    setIsPending(false);
+      setIsPending(false);
 
-    if (error) {
-      setErrorMessage(error.message ?? "注册失败，请稍后重试。");
-      return;
+      if (error) {
+        setErrorMessage(
+          formatAuthErrorMessage(error, "注册失败，请稍后重试。"),
+        );
+        return;
+      }
+
+      startTransition(() => {
+        router.replace("/" as Route);
+        router.refresh();
+      });
+    } catch (error) {
+      setIsPending(false);
+      setErrorMessage(formatAuthErrorMessage(error, "注册失败，请稍后重试。"));
     }
-
-    startTransition(() => {
-      router.replace("/" as Route);
-      router.refresh();
-    });
   }
 
   return (

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: trendx-postgres
+    environment:
+      POSTGRES_DB: trendx
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d trendx"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    volumes:
+      - trendx-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  trendx-postgres-data:

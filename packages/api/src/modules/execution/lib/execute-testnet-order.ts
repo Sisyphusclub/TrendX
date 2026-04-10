@@ -30,6 +30,7 @@ import type {
   ExecuteNextStageInput,
   ExecutionMutationOutput,
 } from "../types";
+import { getHardRiskBlockReason } from "./hard-risk-controls";
 import {
   persistCloseExecution,
   persistEntryExecution,
@@ -489,6 +490,16 @@ export async function executeNextEntryStage(
       input.symbol,
       "No triggered tranche is pending execution right now.",
     );
+  }
+
+  const hardRiskBlockReason = await getHardRiskBlockReason({
+    overviewResult,
+    pair,
+    stage: stageCandidate.stage,
+  });
+
+  if (hardRiskBlockReason) {
+    return buildFailureOutput(input.symbol, hardRiskBlockReason);
   }
 
   const [markPrice, tradingRules] = await Promise.all([

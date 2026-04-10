@@ -50,13 +50,35 @@ Coinank ingestion, Binance execution, and persistent live data will land in late
 
 2. Copy `.env.example` to `.env` and fill in the real secrets.
 
-3. Start the dashboard:
+3. Start PostgreSQL.
+
+   Option A: Docker
+
+   ```bash
+   pnpm db:up
+   ```
+
+   Option B: local PostgreSQL service
+   Use a local PostgreSQL 16+ instance with:
+   - host: `localhost`
+   - port: `5432`
+   - database: `trendx`
+   - username: `postgres`
+   - password: `postgres`
+
+4. Run database migrations:
+
+   ```bash
+   pnpm db:migrate
+   ```
+
+5. Start the dashboard:
 
    ```bash
    pnpm dev
    ```
 
-4. Open [http://localhost:3000](http://localhost:3000).
+6. Open [http://localhost:3000](http://localhost:3000).
 
 ## Useful Commands
 
@@ -65,20 +87,58 @@ pnpm dev
 pnpm build
 pnpm lint
 pnpm type-check
+pnpm db:up
+pnpm db:down
+pnpm db:logs
+pnpm db:migrate
 pnpm db:generate
 ```
 
+## Signal Cycle Scheduling
+
+TrendX now exposes an internal signal-cycle endpoint that persists one hourly market
+snapshot and one signal record per tracked pair:
+
+- route: `POST /api/internal/signal-cycle`
+- auth: `Authorization: Bearer <TRENDX_SIGNAL_CYCLE_SECRET>`
+- cadence: run once per signal interval, ideally right after the hourly candle closes
+
+Hosted route example:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/internal/signal-cycle \
+  -H "Authorization: Bearer $TRENDX_SIGNAL_CYCLE_SECRET"
+```
+
+The endpoint is disabled until `TRENDX_SIGNAL_CYCLE_SECRET` is configured.
+
+For local Windows scheduling:
+
+```powershell
+pnpm signal:cycle
+pnpm signal:cycle:trigger
+pnpm signal:cycle:schedule:windows
+```
+
+The registration script creates an hourly Windows scheduled task named
+`TrendXSignalCycle` that runs `scripts/run-signal-cycle.ps1`.
+
+- `pnpm signal:cycle`: direct runner, no web server required
+- `pnpm signal:cycle:trigger`: hit the internal HTTP route
+
 ## Current Data Mode
 
-The dashboard currently renders seeded strategy data that mirrors the approved MVP rule
-shape:
+The dashboard and signal cycle currently support:
 
+- live Coinank market data when the API key is configured
+- seeded fallback data when Coinank is unavailable
 - trend-following only
 - hourly cadence
 - staged entries `30 / 40 / 30`
 - 10% balance allocation per entry
 - 20x leverage
 - global kill-switch visibility
+- Binance testnet execution only
 
-The goal of this scaffold is to make the future Coinank and Binance integrations plug
-into stable contracts instead of being invented ad hoc.
+Mainnet execution, automated scheduling infrastructure, and production hardening still
+need to be completed before formal launch.

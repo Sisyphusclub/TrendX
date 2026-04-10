@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const trackedSymbolSchema = z.enum(["BTCUSDT", "ETHUSDT"]);
 export const trendDirectionSchema = z.enum(["BULLISH", "BEARISH", "NEUTRAL"]);
+export const orderBlockDirectionSchema = z.enum(["BULLISH", "BEARISH"]);
 export const signalActionSchema = z.enum(["ENTRY", "EXIT", "WAIT"]);
 export const executionStatusSchema = z.enum([
   "PENDING",
@@ -65,9 +66,13 @@ export const dashboardPairSchema = z.object({
   executionStatus: executionStatusSchema,
   fundingRate: z.number(),
   lastPrice: z.number(),
+  mainOrderBlock: orderBlockSchema,
+  mainOrderBlockDirection: orderBlockDirectionSchema,
   markPrice: z.number(),
   openInterestDeltaPct: z.number(),
   orderBlock: orderBlockSchema,
+  previousOppositeOrderBlock: orderBlockSchema.nullable(),
+  previousOppositeOrderBlockDirection: orderBlockDirectionSchema.nullable(),
   rationale: z.string().min(1),
   riskLabel: z.string().min(1),
   stopLoss: z.number(),
@@ -91,6 +96,12 @@ export const accountRiskSchema = z.object({
 export const dashboardExecutionConfigSchema = z.object({
   balanceAllocationPct: z.number().positive(),
   confirmationThreshold: z.number().int().positive(),
+  hardRisk: z.object({
+    cooldownMinutesAfterClose: z.number().int().nonnegative(),
+    maxDailyLossPct: z.number().positive(),
+    maxExposurePct: z.number().positive(),
+    requireCurrentSignalCycle: z.boolean(),
+  }),
   leverage: z.number().positive(),
   stageAllocations: z.array(z.number().positive()).length(3),
 });

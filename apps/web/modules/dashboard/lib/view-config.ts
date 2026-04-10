@@ -40,9 +40,9 @@ export const dashboardSectionMeta: Record<
   }
 > = {
   controls: {
-    description: "执行纪律、账户安全与策略边界设置。",
+    description: "仅保留账户密码修改。",
     eyebrow: "设置",
-    title: "策略设置",
+    title: "修改密码",
   },
   journal: {
     description: "执行、成交与调度记录。",

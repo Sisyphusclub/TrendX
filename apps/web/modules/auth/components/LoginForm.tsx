@@ -12,13 +12,22 @@ import {
 
 import { authClient } from "@/lib/auth-client";
 
+import { formatAuthErrorMessage } from "../lib/error-messages";
 import { authPrimaryButtonClassName } from "../lib/styles";
 import { AuthField } from "./AuthField";
 
-export function LoginForm(): ReactElement {
+interface LoginFormProps {
+  defaultEmail?: string;
+  defaultPassword?: string;
+}
+
+export function LoginForm({
+  defaultEmail = "",
+  defaultPassword = "",
+}: LoginFormProps): ReactElement {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(defaultEmail);
+  const [password, setPassword] = useState(defaultPassword);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
@@ -30,23 +39,30 @@ export function LoginForm(): ReactElement {
     setErrorMessage(null);
     setIsPending(true);
 
-    const { error } = await authClient.signIn.email({
-      email,
-      password,
-      rememberMe: true,
-    });
+    try {
+      const { error } = await authClient.signIn.email({
+        email,
+        password,
+        rememberMe: true,
+      });
 
-    setIsPending(false);
+      setIsPending(false);
 
-    if (error) {
-      setErrorMessage(error.message ?? "登录失败，请稍后重试。");
-      return;
+      if (error) {
+        setErrorMessage(
+          formatAuthErrorMessage(error, "登录失败，请稍后重试。"),
+        );
+        return;
+      }
+
+      startTransition(() => {
+        router.replace("/" as Route);
+        router.refresh();
+      });
+    } catch (error) {
+      setIsPending(false);
+      setErrorMessage(formatAuthErrorMessage(error, "登录失败，请稍后重试。"));
     }
-
-    startTransition(() => {
-      router.replace("/" as Route);
-      router.refresh();
-    });
   }
 
   return (
@@ -58,6 +74,11 @@ export function LoginForm(): ReactElement {
         <p className="mt-2 text-sm leading-6 text-[color:var(--color-ink-soft)]">
           进入交易台，查看信号、执行记录和账户安全设置。
         </p>
+        {defaultEmail && defaultPassword ? (
+          <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[color:var(--color-ink-soft)]">
+            本地默认账户已预填，可直接登录。
+          </p>
+        ) : null}
       </div>
 
       <AuthField

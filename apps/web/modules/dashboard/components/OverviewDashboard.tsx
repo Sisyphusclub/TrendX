@@ -183,12 +183,22 @@ export function OverviewDashboard({
                     主订单块
                   </p>
                   <p className="mt-2 text-lg font-semibold tracking-[-0.05em] text-[color:var(--color-ink)]">
-                    {formatUsd(dominantSignal.orderBlock.low)} -{" "}
-                    {formatUsd(dominantSignal.orderBlock.high)}
+                    {formatUsd(dominantSignal.mainOrderBlock.low)} -{" "}
+                    {formatUsd(dominantSignal.mainOrderBlock.high)}
                   </p>
                   <p className="mt-1.5 text-xs text-[color:var(--color-muted)]">
-                    中位 {formatUsd(dominantSignal.orderBlock.mid)}
+                    中位 {formatUsd(dominantSignal.mainOrderBlock.mid)}
                   </p>
+                  {dominantSignal.previousOppositeOrderBlock ? (
+                    <p className="mt-2 text-xs text-[color:var(--color-muted)]">
+                      上一反向块{" "}
+                      {formatUsd(dominantSignal.previousOppositeOrderBlock.low)}{" "}
+                      -{" "}
+                      {formatUsd(
+                        dominantSignal.previousOppositeOrderBlock.high,
+                      )}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="rounded-[22px] border border-[color:var(--color-line)] bg-white/68 px-4 py-4">

@@ -236,17 +236,26 @@ export function PairSignalCard({
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <div className="rounded-[24px] border border-[color:var(--color-line)] bg-[color:var(--color-surface-blue)] p-4">
               <p className="mono text-[11px] uppercase tracking-[0.2em] text-[color:var(--color-muted)]">
-                订单块
+                主订单块
               </p>
               <p className="mt-3 text-2xl font-bold tracking-[-0.05em] text-[color:var(--color-ink)]">
-                {formatUsd(pair.orderBlock.low)}
+                {formatUsd(pair.mainOrderBlock.low)}
               </p>
               <p className="mt-1 text-sm text-[color:var(--color-ink-soft)]">
-                上沿 {formatUsd(pair.orderBlock.high)}
+                上沿 {formatUsd(pair.mainOrderBlock.high)}
               </p>
               <p className="mt-3 text-sm text-[color:var(--color-muted)]">
-                中位 {formatUsd(pair.orderBlock.mid)}
+                中位 {formatUsd(pair.mainOrderBlock.mid)}
               </p>
+              <p className="mt-2 text-xs text-[color:var(--color-muted)]">
+                方向 {formatTrendDirection(pair.mainOrderBlockDirection)}
+              </p>
+              {pair.previousOppositeOrderBlock ? (
+                <p className="mt-2 text-xs text-[color:var(--color-muted)]">
+                  上一反向块 {formatUsd(pair.previousOppositeOrderBlock.low)} /{" "}
+                  {formatUsd(pair.previousOppositeOrderBlock.high)}
+                </p>
+              ) : null}
             </div>
 
             <div className="rounded-[24px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] p-4">

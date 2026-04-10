@@ -1,12 +1,20 @@
+"use client";
+
 import type { DashboardOverview, DashboardPair } from "@trendx/api";
 import {
   BriefcaseBusiness,
   ChartNoAxesCombined,
   History,
+  LogOut,
   Newspaper,
   Settings2,
 } from "lucide-react";
-import type { ReactElement } from "react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
+import { type ReactElement, startTransition, useState } from "react";
+
+import { authClient } from "@/lib/auth-client";
+import { authSecondaryButtonClassName } from "@/modules/auth/lib/styles";
 
 import type { DashboardFeedState } from "../lib/feed-state";
 import { getPairFeedMode } from "../lib/feed-state";
@@ -45,9 +53,22 @@ export function DeskNavigationRail({
   onSignalPairSelect,
   overview,
 }: DeskNavigationRailProps): ReactElement {
+  const router = useRouter();
+  const sessionQuery = authClient.useSession();
   const activeEntryCount = overview.pairs.filter(
     (pair) => pair.action === "ENTRY",
   ).length;
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  async function handleSignOut(): Promise<void> {
+    setIsSigningOut(true);
+    await authClient.signOut();
+
+    startTransition(() => {
+      router.replace("/login" as Route);
+      router.refresh();
+    });
+  }
 
   return (
     <aside className="desk-rail-shell flex h-full min-h-0 flex-col gap-3 rounded-[28px] border border-[color:var(--color-line)] bg-[color:var(--color-surface)] p-3">
@@ -122,7 +143,7 @@ export function DeskNavigationRail({
         })}
       </nav>
 
-      <div className="min-h-0 rounded-[24px] border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] p-3">
+      <div className="min-h-0 flex-1 rounded-[24px] border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-blue)]">
             监控交易对
@@ -184,6 +205,24 @@ export function DeskNavigationRail({
             );
           })}
         </div>
+      </div>
+
+      <div className="mt-auto rounded-[24px] border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] p-3">
+        <p className="mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--color-blue)]">
+          当前账户
+        </p>
+        <p className="mt-2 truncate text-sm font-semibold text-[color:var(--color-ink)]">
+          {sessionQuery.data?.user.email ?? "operator@trendx.local"}
+        </p>
+        <button
+          className={`${authSecondaryButtonClassName} mt-3 w-full`}
+          disabled={isSigningOut}
+          onClick={handleSignOut}
+          type="button"
+        >
+          <LogOut className="mr-2 size-4" />
+          {isSigningOut ? "退出中..." : "退出登录"}
+        </button>
       </div>
     </aside>
   );

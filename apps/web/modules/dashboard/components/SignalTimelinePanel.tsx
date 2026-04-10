@@ -25,13 +25,16 @@ export function SignalTimelinePanel({
   ).length;
   const steps = [
     {
-      detail: `${formatTrendDirection(pair.trendDirection)}方向已由 OI 与价格结构确认`,
+      detail:
+        pair.trendDirection === "NEUTRAL"
+          ? `当前没有顺势确认，主订单块仍按 ${formatTrendDirection(pair.mainOrderBlockDirection)} 方向跟踪`
+          : `${formatTrendDirection(pair.trendDirection)}方向已由 OI 与价格结构确认`,
       icon: Search,
       label: "方向判断",
-      state: "complete",
+      state: pair.trendDirection === "NEUTRAL" ? "watch" : "complete",
     },
     {
-      detail: `主订单块 ${formatUsd(pair.orderBlock.low)} 到 ${formatUsd(pair.orderBlock.high)}`,
+      detail: `主订单块 ${formatUsd(pair.mainOrderBlock.low)} 到 ${formatUsd(pair.mainOrderBlock.high)}`,
       icon: Target,
       label: "订单块",
       state: "active",
@@ -57,7 +60,7 @@ export function SignalTimelinePanel({
             ? `已触发 ${triggeredStageCount}/3 档${
                 nextStage ? `，下一档 ${formatUsd(nextStage.plannedPrice)}` : ""
               }，剩余档位继续复核 ${pair.confirmationThreshold}/6 项，失效位在 ${formatUsd(pair.stopLoss)} 之外`
-            : `首档等待 ${formatUsd(nextStage?.plannedPrice ?? pair.orderBlock.mid)}，触发前先复核 ${pair.confirmationThreshold}/6 项，失效位在 ${formatUsd(pair.stopLoss)} 之外`,
+            : `首档等待 ${formatUsd(nextStage?.plannedPrice ?? pair.mainOrderBlock.mid)}，触发前先复核 ${pair.confirmationThreshold}/6 项，失效位在 ${formatUsd(pair.stopLoss)} 之外`,
       icon: ArrowRight,
       label: "执行计划",
       state:

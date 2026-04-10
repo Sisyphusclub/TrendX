@@ -98,13 +98,7 @@ export function DashboardClient({
     }
 
     if (activeSection === "controls") {
-      return (
-        <ExecutionControlPanel
-          overview={overview}
-          isReferenceOnly={feedState.hasReferenceRisk}
-          onNavigate={setActiveSection}
-        />
-      );
+      return <ExecutionControlPanel />;
     }
 
     if (activeSection === "signals") {

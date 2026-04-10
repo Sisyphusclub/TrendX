@@ -135,6 +135,33 @@ export function AccountRiskPanel({
             </div>
           </div>
         </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-[22px] border border-white/10 bg-white/6 px-4 py-3">
+            <p className="mono text-[11px] uppercase tracking-[0.22em] muted-on-dark">
+              日亏损上限
+            </p>
+            <p className="mt-2 text-lg font-semibold text-white">
+              {executionConfig.hardRisk.maxDailyLossPct.toFixed(1)}%
+            </p>
+          </div>
+          <div className="rounded-[22px] border border-white/10 bg-white/6 px-4 py-3">
+            <p className="mono text-[11px] uppercase tracking-[0.22em] muted-on-dark">
+              总敞口上限
+            </p>
+            <p className="mt-2 text-lg font-semibold text-white">
+              {formatPct(executionConfig.hardRisk.maxExposurePct)}
+            </p>
+          </div>
+          <div className="rounded-[22px] border border-white/10 bg-white/6 px-4 py-3">
+            <p className="mono text-[11px] uppercase tracking-[0.22em] muted-on-dark">
+              平仓冷却
+            </p>
+            <p className="mt-2 text-lg font-semibold text-white">
+              {executionConfig.hardRisk.cooldownMinutesAfterClose} 分钟
+            </p>
+          </div>
+        </div>
       </div>
     </Panel>
   );

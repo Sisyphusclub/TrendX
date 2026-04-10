@@ -1,3 +1,4 @@
+import { getDefaultOperatorLoginPreset } from "@trendx/api/lib/default-operator";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import type { ReactElement } from "react";
@@ -8,6 +9,7 @@ import { LoginForm } from "@/modules/auth/components/LoginForm";
 
 export default async function LoginPage(): Promise<ReactElement> {
   const session = await getServerSession();
+  const defaultOperatorPreset = getDefaultOperatorLoginPreset();
 
   if (session) {
     redirect("/" as Route);
@@ -21,7 +23,10 @@ export default async function LoginPage(): Promise<ReactElement> {
       footerText="还没有账户？"
       title="连接你的执行台"
     >
-      <LoginForm />
+      <LoginForm
+        defaultEmail={defaultOperatorPreset?.email}
+        defaultPassword={defaultOperatorPreset?.password}
+      />
     </AuthShell>
   );
 }

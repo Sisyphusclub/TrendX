@@ -1,31 +1,19 @@
 "use client";
 
-import { LockKeyhole, LogOut, ShieldCheck } from "lucide-react";
-import type { Route } from "next";
-import { useRouter } from "next/navigation";
-import {
-  type FormEvent,
-  type ReactElement,
-  startTransition,
-  useState,
-} from "react";
+import { ShieldCheck } from "lucide-react";
+import { type FormEvent, type ReactElement, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { AuthField } from "@/modules/auth/components/AuthField";
-import {
-  authPrimaryButtonClassName,
-  authSecondaryButtonClassName,
-} from "@/modules/auth/lib/styles";
+import { authPrimaryButtonClassName } from "@/modules/auth/lib/styles";
 
 export function AccountSecurityPanel(): ReactElement {
-  const router = useRouter();
   const sessionQuery = authClient.useSession();
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
-  const [isSigningOut, setIsSigningOut] = useState(false);
 
   async function handleChangePassword(
     event: FormEvent<HTMLFormElement>,
@@ -62,16 +50,6 @@ export function AccountSecurityPanel(): ReactElement {
     setNextPassword("");
     setConfirmPassword("");
     setFeedback("密码已更新，其他会话已失效。");
-  }
-
-  async function handleSignOut(): Promise<void> {
-    setIsSigningOut(true);
-    await authClient.signOut();
-
-    startTransition(() => {
-      router.replace("/login" as Route);
-      router.refresh();
-    });
   }
 
   const session = sessionQuery.data;
@@ -148,31 +126,6 @@ export function AccountSecurityPanel(): ReactElement {
           </button>
         </div>
       </form>
-
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-[color:var(--color-line)] bg-[color:var(--color-surface-soft)] px-4 py-4">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-surface)] text-[color:var(--color-ink-soft)]">
-            <LockKeyhole className="size-4" />
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-[color:var(--color-ink)]">
-              当前会话
-            </p>
-            <p className="text-sm text-[color:var(--color-ink-soft)]">
-              {session?.user.name ?? "TrendX Operator"}
-            </p>
-          </div>
-        </div>
-        <button
-          className={authSecondaryButtonClassName}
-          disabled={isSigningOut}
-          onClick={handleSignOut}
-          type="button"
-        >
-          <LogOut className="mr-2 size-4" />
-          {isSigningOut ? "退出中..." : "退出登录"}
-        </button>
-      </div>
     </section>
   );
 }

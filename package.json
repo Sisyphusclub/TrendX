@@ -8,13 +8,21 @@
     "lint": "turbo lint",
     "type-check": "turbo type-check",
     "db:generate": "pnpm --filter @trendx/database db:generate",
-    "db:migrate": "pnpm --filter @trendx/database db:migrate"
+    "db:migrate": "pnpm --filter @trendx/database db:migrate",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "signal:cycle": "tsx --tsconfig ./tsconfig.base.json ./scripts/run-signal-cycle-direct.ts",
+    "signal:cycle:trigger": "node ./scripts/trigger-signal-cycle.mjs",
+    "signal:cycle:run": "powershell -ExecutionPolicy Bypass -File ./scripts/run-signal-cycle.ps1",
+    "signal:cycle:schedule:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/register-signal-cycle-task.ps1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.10",
     "@types/node": "24.7.2",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
+    "tsx": "^4.21.0",
     "turbo": "2.9.4",
     "typescript": "5.9.3"
   }
