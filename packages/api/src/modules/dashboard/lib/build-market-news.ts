@@ -1,4 +1,5 @@
 import { logger } from "@trendx/logs";
+import { z } from "zod";
 
 import {
   type GetDashboardMarketNewsOutput,
@@ -16,6 +17,11 @@ const COINANK_NEWS_LANGUAGE = "zh";
 const FLASH_LIMIT = 6;
 const HEADLINE_LIMIT = 4;
 const SUMMARY_MAX_LENGTH = 180;
+const LOCAL_NEWS_REASON = "Local seeded market news loaded.";
+
+const marketNewsEnvSchema = z.object({
+  TRENDX_MARKET_NEWS_PROVIDER: z.enum(["coinank", "local"]).default("local"),
+});
 
 function sanitizeNewsText(value: string): string {
   return value
@@ -171,9 +177,25 @@ async function fetchMarketNewsSection(
 }
 
 export async function buildDashboardMarketNews(): Promise<GetDashboardMarketNewsOutput> {
+  const marketNewsProvider = marketNewsEnvSchema.parse(
+    process.env,
+  ).TRENDX_MARKET_NEWS_PROVIDER;
   const config = getCoinankDashboardConfig();
   const fallbackFlashes = buildSeededMarketNewsItems("FLASH");
   const fallbackHeadlines = buildSeededMarketNewsItems("NEWS");
+
+  if (marketNewsProvider === "local") {
+    return getDashboardMarketNewsOutputSchema.parse({
+      marketNews: {
+        flashes: fallbackFlashes,
+        generatedAt: new Date().toISOString(),
+        headlines: fallbackHeadlines,
+        mode: "fallback",
+      },
+      reason: LOCAL_NEWS_REASON,
+      success: true,
+    });
+  }
 
   if (!config) {
     logger.warn("Coinank API key missing; serving seeded market news.");

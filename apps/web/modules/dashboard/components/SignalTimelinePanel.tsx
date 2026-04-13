@@ -46,7 +46,7 @@ export function SignalTimelinePanel({
         pair.confirmationThreshold,
       )}，并在目标区域内重新核对`,
       icon: CircleCheckBig,
-      label: "Coinank 条件",
+      label: "确认条件",
       state:
         pair.confirmationCount >= pair.confirmationThreshold
           ? "active"

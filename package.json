@@ -12,7 +12,11 @@
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
+    "test:dashboard": "tsx --test --tsconfig ./tsconfig.base.json ./packages/api/src/modules/dashboard/lib/build-overview.test.ts ./packages/api/src/modules/dashboard/lib/build-market-news.test.ts ./apps/web/modules/dashboard/lib/feed-state.test.ts",
     "signal:cycle": "tsx --tsconfig ./tsconfig.base.json ./scripts/run-signal-cycle-direct.ts",
+    "market-data:compare": "tsx --tsconfig ./tsconfig.base.json ./scripts/compare-market-data-providers.ts",
+    "market-data:compare:refresh": "tsx --tsconfig ./tsconfig.base.json ./scripts/compare-market-data-providers.ts --refresh",
+    "market-data:backfill": "tsx --tsconfig ./tsconfig.base.json ./scripts/backfill-market-data-inputs.ts",
     "signal:cycle:trigger": "node ./scripts/trigger-signal-cycle.mjs",
     "signal:cycle:run": "powershell -ExecutionPolicy Bypass -File ./scripts/run-signal-cycle.ps1",
     "signal:cycle:schedule:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/register-signal-cycle-task.ps1"

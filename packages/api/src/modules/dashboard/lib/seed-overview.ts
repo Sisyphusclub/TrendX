@@ -218,6 +218,29 @@ export function buildSeededDashboardOverview(
   reason = "Seeded overview ready for PR1 dashboard scaffolding.",
 ): GetDashboardOverviewOutput {
   return getDashboardOverviewOutputSchema.parse({
+    feed: {
+      accountRiskMode: "reference",
+      accountRiskSource: "reference",
+      marketDataMode: "fallback",
+      marketDataSource: "seeded",
+      notes: [reason],
+      pairs: [
+        {
+          capturedAt: null,
+          mode: "fallback",
+          note: reason,
+          source: "seeded",
+          symbol: "BTCUSDT",
+        },
+        {
+          capturedAt: null,
+          mode: "fallback",
+          note: reason,
+          source: "seeded",
+          symbol: "ETHUSDT",
+        },
+      ],
+    },
     overview: {
       accountRisk: {
         availableMargin: 78320,

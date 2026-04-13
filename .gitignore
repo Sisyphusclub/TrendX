@@ -3,6 +3,10 @@
 .turbo/
 dist/
 drizzle/
+!packages/database/drizzle/
+!packages/database/drizzle/**
+!packages/database/src/drizzle/
+!packages/database/src/drizzle/**
 node_modules/
 .env
 .env.local

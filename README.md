@@ -92,12 +92,16 @@ pnpm db:down
 pnpm db:logs
 pnpm db:migrate
 pnpm db:generate
+pnpm market-data:compare
+pnpm market-data:compare:refresh
+pnpm market-data:backfill
 ```
 
 ## Signal Cycle Scheduling
 
 TrendX now exposes an internal signal-cycle endpoint that persists one hourly market
-snapshot and one signal record per tracked pair:
+snapshot, one normalized market-input payload, and one signal record per tracked
+pair:
 
 - route: `POST /api/internal/signal-cycle`
 - auth: `Authorization: Bearer <TRENDX_SIGNAL_CYCLE_SECRET>`
@@ -131,7 +135,10 @@ The registration script creates an hourly Windows scheduled task named
 The dashboard and signal cycle currently support:
 
 - live Coinank market data when the API key is configured
+- database-backed local market snapshots when `TRENDX_MARKET_DATA_PROVIDER=local-db`
 - seeded fallback data when Coinank is unavailable
+- local seeded market news by default (`TRENDX_MARKET_NEWS_PROVIDER=local`)
+- refined 15m Coinank price fetch disabled by default (`TRENDX_COINANK_ENABLE_REFINED_PRICE=off`)
 - trend-following only
 - hourly cadence
 - staged entries `30 / 40 / 30`
@@ -139,6 +146,38 @@ The dashboard and signal cycle currently support:
 - 20x leverage
 - global kill-switch visibility
 - Binance testnet execution only
+
+When `TRENDX_SIGNAL_CYCLE_MARKET_DATA_PROVIDER=coinank`, the signal-cycle path also
+persists the normalized market-input snapshot into both `market_data_inputs` and
+`market_snapshots.raw_payload.marketDataSnapshot`. That lets you split ingestion and
+read-path providers:
+
+1. keep `TRENDX_SIGNAL_CYCLE_MARKET_DATA_PROVIDER=coinank`
+2. persist normalized snapshots to PostgreSQL on every cycle
+3. switch `TRENDX_MARKET_DATA_PROVIDER=local-db`
+4. read local snapshots without calling Coinank for dashboard signal inputs
+
+This split is important: if both settings are switched to `local-db`, the cycle will only
+replay previously persisted snapshots rather than ingesting fresh upstream data.
+
+If you already have legacy `market_snapshots.raw_payload.marketDataSnapshot` rows,
+you can backfill the dedicated table with:
+
+```bash
+pnpm market-data:backfill
+```
+
+To compare current live Coinank output against the local database provider:
+
+```bash
+pnpm market-data:compare
+```
+
+To refresh the persisted local snapshot first and then compare:
+
+```bash
+pnpm market-data:compare:refresh
+```
 
 Mainnet execution, automated scheduling infrastructure, and production hardening still
 need to be completed before formal launch.

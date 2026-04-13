@@ -37,7 +37,7 @@ export function DashboardClient({
   });
 
   const overview = data.overview;
-  const feedState = getDashboardFeedState(data.reason);
+  const feedState = getDashboardFeedState(data.feed);
   const firstPair = overview.pairs.at(0);
 
   if (!firstPair) {

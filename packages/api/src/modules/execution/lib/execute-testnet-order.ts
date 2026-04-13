@@ -139,26 +139,29 @@ function buildFailureOutput(
 function isExecutionUsingReferenceRisk(
   overviewResult: GetDashboardOverviewOutput,
 ): boolean {
-  return overviewResult.reason.includes(
-    "Account risk remains reference-only until Binance execution is integrated.",
+  return overviewResult.feed.accountRiskMode === "reference";
+}
+
+function findPairFeedOrThrow(
+  overviewResult: GetDashboardOverviewOutput,
+  symbol: DashboardPair["symbol"],
+): GetDashboardOverviewOutput["feed"]["pairs"][number] {
+  const pairFeed = overviewResult.feed.pairs.find(
+    (candidate) => candidate.symbol === symbol,
   );
+
+  if (!pairFeed) {
+    throw new Error(`TrendX feed metadata is missing ${symbol}.`);
+  }
+
+  return pairFeed;
 }
 
 function isFallbackSignalBlocked(
   overviewResult: GetDashboardOverviewOutput,
   symbol: DashboardPair["symbol"],
 ): boolean {
-  return (
-    overviewResult.reason.includes(
-      "Coinank API key missing. Serving seeded dashboard overview.",
-    ) ||
-    overviewResult.reason.includes(
-      "Seeded overview ready for PR1 dashboard scaffolding.",
-    ) ||
-    overviewResult.reason.includes(
-      `${symbol} is using seeded fallback data after a Coinank fetch failure.`,
-    )
-  );
+  return findPairFeedOrThrow(overviewResult, symbol).mode === "fallback";
 }
 
 function findPairOrThrow(

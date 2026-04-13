@@ -108,6 +108,24 @@ export const dashboardExecutionConfigSchema = z.object({
 
 export const marketNewsCategorySchema = z.enum(["FLASH", "NEWS"]);
 export const marketNewsModeSchema = z.enum(["live", "mixed", "fallback"]);
+export const dashboardFeedModeSchema = z.enum(["live", "mixed", "fallback"]);
+export const dashboardFeedPairModeSchema = z.enum(["live", "fallback"]);
+export const dashboardFeedMarketSourceSchema = z.enum([
+  "coinank",
+  "database",
+  "mixed",
+  "seeded",
+]);
+export const dashboardFeedAccountRiskModeSchema = z.enum(["live", "reference"]);
+export const dashboardFeedAccountRiskSourceSchema = z.enum([
+  "binance",
+  "reference",
+]);
+export const dashboardFeedPairSourceSchema = z.enum([
+  "coinank",
+  "database",
+  "seeded",
+]);
 export const executionHistoryItemTypeSchema = z.enum([
   "CLOSE",
   "ENTRY",
@@ -163,7 +181,25 @@ export const dashboardOverviewSchema = z.object({
   pairs: z.array(dashboardPairSchema).length(2),
 });
 
+export const dashboardPairFeedSchema = z.object({
+  capturedAt: z.string().datetime().nullable(),
+  mode: dashboardFeedPairModeSchema,
+  note: z.string().min(1),
+  source: dashboardFeedPairSourceSchema,
+  symbol: trackedSymbolSchema,
+});
+
+export const dashboardOverviewFeedSchema = z.object({
+  accountRiskMode: dashboardFeedAccountRiskModeSchema,
+  accountRiskSource: dashboardFeedAccountRiskSourceSchema,
+  marketDataMode: dashboardFeedModeSchema,
+  marketDataSource: dashboardFeedMarketSourceSchema,
+  notes: z.array(z.string().min(1)).min(1),
+  pairs: z.array(dashboardPairFeedSchema).length(2),
+});
+
 export const getDashboardOverviewOutputSchema = z.object({
+  feed: dashboardOverviewFeedSchema,
   overview: dashboardOverviewSchema,
   reason: z.string().min(1),
   success: z.boolean(),
@@ -182,6 +218,7 @@ export const getDashboardExecutionHistoryOutputSchema = z.object({
 });
 
 export type DashboardOverview = z.infer<typeof dashboardOverviewSchema>;
+export type DashboardOverviewFeed = z.infer<typeof dashboardOverviewFeedSchema>;
 export type DashboardExecutionConfig = z.infer<
   typeof dashboardExecutionConfigSchema
 >;

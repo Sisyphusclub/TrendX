@@ -101,7 +101,7 @@ export function formatFeedMode(value: "fallback" | "live"): string {
     return "种子回退";
   }
 
-  return "Coinank 实时";
+  return "实时信号";
 }
 
 export function formatEntryStageStatus(

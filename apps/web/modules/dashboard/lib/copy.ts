@@ -1,6 +1,18 @@
 import type { DashboardPair } from "@trendx/api";
 
 const liveReason = "Coinank live market data loaded for dashboard pairs.";
+const coinankDatabaseMissingKeyFallbackReason =
+  "Local database market snapshots are serving as fallback because Coinank is not configured.";
+const coinankDatabaseFallbackReason =
+  "Local database market snapshots are serving as fallback after Coinank fetch failures.";
+const localDatabaseLiveReason =
+  "Local database market snapshots loaded for dashboard pairs.";
+const localDatabaseEmptyReason =
+  "Local database market snapshots are not ready yet. Serving seeded dashboard overview.";
+const localDatabaseMissingReason =
+  "DATABASE_URL is missing; local database market snapshots are unavailable. Serving seeded dashboard overview.";
+const localDatabaseStaleReason =
+  "Local database market snapshots are stale. Serving seeded dashboard overview.";
 const binanceLiveRiskReason = "Binance USD-M Futures live account risk synced.";
 const binanceTestnetRiskReason =
   "Binance USD-M Futures testnet account risk synced.";
@@ -14,14 +26,44 @@ const seededOverviewReason =
   "Seeded overview ready for PR1 dashboard scaffolding.";
 const fallbackReasonPattern =
   /([A-Z]+USDT) is using seeded fallback data after a Coinank fetch failure\./;
+const coinankDatabaseFallbackPattern =
+  /([A-Z]+USDT) is using local database fallback data after a Coinank fetch failure\./;
+const localDatabaseFallbackPattern =
+  /([A-Z]+USDT) has no persisted local market snapshot yet\. Serving seeded fallback data\./;
+const localDatabaseStaleFallbackPattern =
+  /([A-Z]+USDT) local market snapshot is stale\. Serving seeded fallback data\./;
 const liveRationalePattern =
-  /([A-Z]+USDT) shows (bullish|bearish) OI-price alignment with price ([+\-\d.]+%) and open interest ([+\-\d.]+%) over the recent 12h\. (\d+)\/6 live Coinank checks are aligned, and price is (inside|outside) the preferred 1h order block\./;
+  /([A-Z]+USDT) shows (bullish|bearish) OI-price alignment with price ([+\-\d.]+%) and open interest ([+\-\d.]+%) over the recent 12h\. (\d+)\/6 signal checks are aligned, and price is (inside|outside) the preferred 1h order block\./;
 const refinedLiveRationalePattern =
-  /([A-Z]+USDT) shows (bullish|bearish) OI-price alignment with price ([+\-\d.]+%) and open interest ([+\-\d.]+%) over the recent 12h\. (\d+)\/6 live Coinank checks are aligned\. (A confirmed 1h (bullish|bearish) order block was anchored to the last (down|up) candle before a BOS close through ([\d.]+)\. The block is (fresh|already mitigated)\.|No structure-confirmed 1h order block was found, so the current zone remains reference-only\.)( The execution zone was refined on ([\d]+m)\.)? Price is (inside|outside) the tracked zone\./;
+  /([A-Z]+USDT) shows (bullish|bearish) OI-price alignment with price ([+\-\d.]+%) and open interest ([+\-\d.]+%) over the recent 12h\. (\d+)\/6 signal checks are aligned\. (A confirmed 1h (bullish|bearish) order block was anchored to the last (down|up) candle before a BOS close through ([\d.]+)\. The block is (fresh|already mitigated)\.|No structure-confirmed 1h order block was found, so the current zone remains reference-only\.)( The execution zone was refined on ([\d]+m)\.)? Price is (inside|outside) the tracked zone\./;
 
 export function localizeFeedReasonNote(note: string): string {
   if (note === liveReason) {
     return "Coinank 实时行情已载入当前监控交易对。";
+  }
+
+  if (note === coinankDatabaseMissingKeyFallbackReason) {
+    return "未配置 Coinank 时，当前已改用本地数据库快照回退。";
+  }
+
+  if (note === coinankDatabaseFallbackReason) {
+    return "Coinank 拉取失败时，当前已改用本地数据库快照回退。";
+  }
+
+  if (note === localDatabaseLiveReason) {
+    return "本地数据库快照已载入当前监控交易对。";
+  }
+
+  if (note === localDatabaseEmptyReason) {
+    return "本地数据库快照尚未准备完成，当前展示种子仪表盘数据。";
+  }
+
+  if (note === localDatabaseStaleReason) {
+    return "本地数据库快照已经过期，当前展示种子仪表盘数据。";
+  }
+
+  if (note === localDatabaseMissingReason) {
+    return "未检测到 DATABASE_URL，本地数据库快照不可用，当前展示种子仪表盘数据。";
   }
 
   if (note === binanceTestnetRiskReason) {
@@ -52,6 +94,26 @@ export function localizeFeedReasonNote(note: string): string {
 
   if (fallbackMatch) {
     return `${fallbackMatch[1]} 因 Coinank 拉取失败，当前使用种子回退数据。`;
+  }
+
+  const coinankDatabaseFallbackMatch =
+    coinankDatabaseFallbackPattern.exec(note);
+
+  if (coinankDatabaseFallbackMatch) {
+    return `${coinankDatabaseFallbackMatch[1]} 因 Coinank 拉取失败，当前使用本地数据库快照回退。`;
+  }
+
+  const localDatabaseFallbackMatch = localDatabaseFallbackPattern.exec(note);
+
+  if (localDatabaseFallbackMatch) {
+    return `${localDatabaseFallbackMatch[1]} 尚无本地数据库快照，当前使用种子回退数据。`;
+  }
+
+  const localDatabaseStaleFallbackMatch =
+    localDatabaseStaleFallbackPattern.exec(note);
+
+  if (localDatabaseStaleFallbackMatch) {
+    return `${localDatabaseStaleFallbackMatch[1]} 的本地数据库快照已过期，当前使用种子回退数据。`;
   }
 
   return note;
@@ -158,7 +220,7 @@ export function formatRationale(
     const locationLabel =
       liveMatch[6] === "inside" ? "已进入" : "仍在外部等待回到";
 
-    return `${liveMatch[1]} 在最近 12 小时出现${directionLabel}的 OI 与价格共振，价格变化 ${liveMatch[3]}，持仓量变化 ${liveMatch[4]}。当前 ${liveMatch[5]}/6 项 Coinank 条件通过，价格${locationLabel}首选的 1 小时订单块。`;
+    return `${liveMatch[1]} 在最近 12 小时出现${directionLabel}的 OI 与价格共振，价格变化 ${liveMatch[3]}，持仓量变化 ${liveMatch[4]}。当前 ${liveMatch[5]}/6 项确认条件通过，价格${locationLabel}首选的 1 小时订单块。`;
   }
 
   const refinedLiveMatch = refinedLiveRationalePattern.exec(rationale);
@@ -176,7 +238,7 @@ export function formatRationale(
         ? "已触发分段区域"
         : "仍在分段区域外等待";
 
-    return `${refinedLiveMatch[1]} 在最近 12 小时出现${directionLabel}的 OI 与价格共振，价格变化 ${refinedLiveMatch[3]}，持仓量变化 ${refinedLiveMatch[4]}。当前 ${refinedLiveMatch[5]}/6 项 Coinank 条件通过，${structureLabel}${refineLabel}，价格${locationLabel}。`;
+    return `${refinedLiveMatch[1]} 在最近 12 小时出现${directionLabel}的 OI 与价格共振，价格变化 ${refinedLiveMatch[3]}，持仓量变化 ${refinedLiveMatch[4]}。当前 ${refinedLiveMatch[5]}/6 项确认条件通过，${structureLabel}${refineLabel}，价格${locationLabel}。`;
   }
 
   return rationale;

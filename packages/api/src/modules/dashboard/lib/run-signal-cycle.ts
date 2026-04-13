@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
 
 import { schema } from "@trendx/database";
-import { eq } from "@trendx/database/drizzle/operators";
+import { and, eq } from "@trendx/database/drizzle/operators";
 import { logger } from "@trendx/logs";
 
 import { getRequiredDatabaseClient } from "../../../lib/database";
 import { DASHBOARD_EXECUTION_CONFIG } from "../config";
 import type { DashboardPair, GetDashboardOverviewOutput } from "../types";
-import { buildDashboardOverview } from "./build-overview";
+import { buildDashboardOverviewFromMarketData } from "./build-overview";
+import {
+  type DashboardMarketDataPairFeed,
+  type DashboardMarketDataSnapshot,
+  loadDashboardMarketDataForSignalCycle,
+} from "./market-data-provider";
 
 const DEFAULT_TIMEFRAME = "1h";
 const SIGNAL_INTERVAL_PATTERN = /^(\d+)(m|h|d)$/i;
@@ -31,6 +36,14 @@ export interface RunDashboardSignalCycleResult {
 
 function toNumericString(value: number, digits: number): string {
   return Number.isFinite(value) ? value.toFixed(digits) : (0).toFixed(digits);
+}
+
+function toJsonObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
 }
 
 export function getSignalTimeframe(): string {
@@ -130,8 +143,55 @@ async function upsertAccountSnapshot(params: {
   return accountSnapshotId;
 }
 
+async function upsertMarketDataInputSnapshot(params: {
+  capturedAt: Date;
+  feed: DashboardMarketDataPairFeed;
+  snapshot: DashboardMarketDataSnapshot;
+  timeframe: string;
+}): Promise<void> {
+  const db = getRequiredDatabaseClient();
+  const [existingInput] = await db
+    .select({
+      id: schema.marketDataInputs.id,
+    })
+    .from(schema.marketDataInputs)
+    .where(
+      and(
+        eq(schema.marketDataInputs.symbol, params.snapshot.symbol),
+        eq(schema.marketDataInputs.timeframe, params.timeframe),
+        eq(schema.marketDataInputs.capturedAt, params.capturedAt),
+      ),
+    )
+    .limit(1);
+  const values = {
+    capturedAt: params.capturedAt,
+    feed: toJsonObject(params.feed),
+    providerSource: params.feed.source,
+    snapshot: toJsonObject(params.snapshot),
+    symbol: params.snapshot.symbol,
+    timeframe: params.timeframe,
+    updatedAt: new Date(),
+  };
+
+  if (existingInput) {
+    await db
+      .update(schema.marketDataInputs)
+      .set(values)
+      .where(eq(schema.marketDataInputs.id, existingInput.id));
+
+    return;
+  }
+
+  await db.insert(schema.marketDataInputs).values({
+    id: randomUUID(),
+    ...values,
+  });
+}
+
 export async function persistDashboardPairSignalSnapshot(params: {
   capturedAt: Date;
+  marketDataFeed?: DashboardMarketDataPairFeed | null;
+  marketDataSnapshot?: DashboardMarketDataSnapshot | null;
   overviewGeneratedAt: string;
   overviewReason: string;
   pair: DashboardPair;
@@ -140,6 +200,36 @@ export async function persistDashboardPairSignalSnapshot(params: {
   const db = getRequiredDatabaseClient();
   const snapshotId = randomUUID();
   const mainOrderBlock = params.pair.mainOrderBlock;
+
+  if (params.marketDataFeed && params.marketDataSnapshot) {
+    await upsertMarketDataInputSnapshot({
+      capturedAt: params.capturedAt,
+      feed: params.marketDataFeed,
+      snapshot: params.marketDataSnapshot,
+      timeframe: params.timeframe,
+    });
+  }
+
+  const [existingSnapshot] = await db
+    .select({
+      id: schema.marketSnapshots.id,
+      rawPayload: schema.marketSnapshots.rawPayload,
+    })
+    .from(schema.marketSnapshots)
+    .where(
+      and(
+        eq(schema.marketSnapshots.symbol, params.pair.symbol),
+        eq(schema.marketSnapshots.timeframe, params.timeframe),
+        eq(schema.marketSnapshots.capturedAt, params.capturedAt),
+      ),
+    )
+    .limit(1);
+  const existingRawPayload =
+    existingSnapshot?.rawPayload &&
+    typeof existingSnapshot.rawPayload === "object" &&
+    !Array.isArray(existingSnapshot.rawPayload)
+      ? existingSnapshot.rawPayload
+      : {};
   const snapshotValues = {
     aggressiveFlowScore: params.pair.checklist.find(
       (item) => item.key === "aggressiveFlow",
@@ -162,7 +252,14 @@ export async function persistDashboardPairSignalSnapshot(params: {
       : "0.00",
     openInterestDeltaPct: toNumericString(params.pair.openInterestDeltaPct, 2),
     rawPayload: {
+      ...existingRawPayload,
       executionConfig: DASHBOARD_EXECUTION_CONFIG,
+      marketDataFeed:
+        params.marketDataFeed ?? existingRawPayload.marketDataFeed ?? null,
+      marketDataSnapshot:
+        params.marketDataSnapshot ??
+        existingRawPayload.marketDataSnapshot ??
+        null,
       overviewGeneratedAt: params.overviewGeneratedAt,
       overviewReason: params.overviewReason,
       pair: params.pair,
@@ -170,23 +267,22 @@ export async function persistDashboardPairSignalSnapshot(params: {
     symbol: params.pair.symbol,
     timeframe: params.timeframe,
   };
-  const [snapshot] = await db
-    .insert(schema.marketSnapshots)
-    .values({
+
+  if (existingSnapshot) {
+    await db
+      .update(schema.marketSnapshots)
+      .set(snapshotValues)
+      .where(eq(schema.marketSnapshots.id, existingSnapshot.id));
+  } else {
+    await db.insert(schema.marketSnapshots).values({
       id: snapshotId,
       ...snapshotValues,
-    })
-    .onConflictDoUpdate({
-      set: snapshotValues,
-      target: [
-        schema.marketSnapshots.symbol,
-        schema.marketSnapshots.timeframe,
-        schema.marketSnapshots.capturedAt,
-      ],
-    })
-    .returning({
-      id: schema.marketSnapshots.id,
     });
+  }
+
+  const snapshot = {
+    id: existingSnapshot?.id ?? snapshotId,
+  };
 
   if (!snapshot) {
     throw new Error(
@@ -257,11 +353,19 @@ export async function persistDashboardPairSignalSnapshot(params: {
 }
 
 export async function runDashboardSignalCycle(): Promise<RunDashboardSignalCycleResult> {
-  const overviewResult = await buildDashboardOverview();
+  const marketDataResult = await loadDashboardMarketDataForSignalCycle();
+  const overviewResult =
+    await buildDashboardOverviewFromMarketData(marketDataResult);
   const timeframe = getSignalTimeframe();
   const cycleCapturedAt = getCycleCapturedAt(
     overviewResult.overview.generatedAt,
     timeframe,
+  );
+  const pairMarketDataBySymbol = new Map(
+    marketDataResult.pairs.map((pairResult) => [
+      pairResult.fallbackPair.symbol,
+      pairResult,
+    ]),
   );
 
   const accountSnapshotId = await upsertAccountSnapshot({
@@ -272,6 +376,9 @@ export async function runDashboardSignalCycle(): Promise<RunDashboardSignalCycle
     overviewResult.overview.pairs.map((pair) =>
       persistDashboardPairSignalSnapshot({
         capturedAt: cycleCapturedAt,
+        marketDataFeed: pairMarketDataBySymbol.get(pair.symbol)?.feed ?? null,
+        marketDataSnapshot:
+          pairMarketDataBySymbol.get(pair.symbol)?.snapshot ?? null,
         overviewGeneratedAt: overviewResult.overview.generatedAt,
         overviewReason: overviewResult.reason,
         pair,

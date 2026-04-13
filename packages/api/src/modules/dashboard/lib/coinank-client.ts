@@ -14,6 +14,7 @@ const coinankEnvSchema = z.object({
     .default("https://open-api.coinank.com"),
   TRENDX_COINANK_API_KEY: z.string().optional(),
   TRENDX_COINANK_EXCHANGE: z.string().min(1).default("Binance"),
+  TRENDX_COINANK_ENABLE_REFINED_PRICE: z.enum(["on", "off"]).default("off"),
   TRENDX_COINANK_PRODUCT_TYPE: z.string().min(1).default("SWAP"),
   TRENDX_DEFAULT_PAIRS: z.string().default("BTCUSDT,ETHUSDT"),
   TRENDX_KILL_SWITCH_DEFAULT: z.enum(["on", "off"]).default("off"),
@@ -59,7 +60,6 @@ const coinankBooleanSchema = z
     return value === "true" || value === "1";
   });
 
-const cvdPointSchema = z.array(z.coerce.number()).min(4);
 const newsListItemSchema = z.object({
   content: z.string(),
   id: z.string().min(1),
@@ -98,6 +98,7 @@ export interface CoinankDashboardConfig {
   interval: string;
   killSwitchEnabled: boolean;
   productType: string;
+  refinedPriceEnabled: boolean;
   trackedPairs: [DashboardPair["symbol"], DashboardPair["symbol"]];
 }
 
@@ -516,6 +517,7 @@ export function getCoinankDashboardConfig(): CoinankDashboardConfig | null {
     interval: env.TRENDX_SIGNAL_INTERVAL,
     killSwitchEnabled: env.TRENDX_KILL_SWITCH_DEFAULT === "on",
     productType: env.TRENDX_COINANK_PRODUCT_TYPE,
+    refinedPriceEnabled: env.TRENDX_COINANK_ENABLE_REFINED_PRICE === "on",
     trackedPairs: normalizeTrackedPairs(env.TRENDX_DEFAULT_PAIRS),
   };
 }
@@ -524,21 +526,23 @@ export async function fetchCoinankPairSnapshot(
   config: CoinankDashboardConfig,
   symbol: DashboardPair["symbol"],
 ): Promise<CoinankPairSnapshot> {
-  const refinedPriceCandlesPromise = fetchPriceCandles(config, symbol, {
-    interval: COINANK_REFINED_PRICE_CANDLE_INTERVAL,
-    size: COINANK_REFINED_PRICE_CANDLE_LIMIT,
-  }).catch((error) => {
-    logger.warn(
-      "Coinank refined price candles unavailable; using primary interval",
-      {
-        error: error instanceof Error ? error.message : String(error),
+  const refinedPriceCandlesPromise = config.refinedPriceEnabled
+    ? fetchPriceCandles(config, symbol, {
         interval: COINANK_REFINED_PRICE_CANDLE_INTERVAL,
-        symbol,
-      },
-    );
+        size: COINANK_REFINED_PRICE_CANDLE_LIMIT,
+      }).catch((error) => {
+        logger.warn(
+          "Coinank refined price candles unavailable; using primary interval",
+          {
+            error: error instanceof Error ? error.message : String(error),
+            interval: COINANK_REFINED_PRICE_CANDLE_INTERVAL,
+            symbol,
+          },
+        );
 
-    return null;
-  });
+        return null;
+      })
+    : Promise.resolve(null);
   const [
     fundingRateCandles,
     liquidations,
@@ -564,56 +568,4 @@ export async function fetchCoinankPairSnapshot(
     refinedPriceCandles,
     symbol,
   };
-}
-
-export async function fetchCoinankCvdBiasPct(
-  config: CoinankDashboardConfig,
-  symbol: DashboardPair["symbol"],
-): Promise<number | null> {
-  try {
-    const points = await requestCoinank(
-      config,
-      "/api/cvd/getAggCvdKline",
-      {
-        baseCoin: getBaseCoin(symbol),
-        endTime: Date.now(),
-        exchanges: config.exchange,
-        interval: config.interval,
-        productType: config.productType,
-        size: 12,
-        type: "CVD",
-      },
-      z.array(cvdPointSchema),
-      {
-        failureLogLevel: "warn",
-      },
-    );
-
-    const latestPoint = points[points.length - 1];
-
-    if (!latestPoint) {
-      return null;
-    }
-
-    const positiveFlow = Math.abs(latestPoint[1] ?? 0);
-    const negativeFlow = Math.abs(latestPoint[2] ?? 0);
-    const netFlow = latestPoint[3] ?? 0;
-    const totalFlow = positiveFlow + negativeFlow;
-
-    if (totalFlow === 0) {
-      return 0;
-    }
-
-    return (netFlow / totalFlow) * 100;
-  } catch (error) {
-    logger.warn(
-      "Coinank CVD endpoint unavailable; falling back to taker bias",
-      {
-        error: error instanceof Error ? error.message : String(error),
-        symbol,
-      },
-    );
-
-    return null;
-  }
 }
