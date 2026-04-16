@@ -5,14 +5,18 @@ import { Pool } from "pg";
 
 import * as schema from "./drizzle/schema";
 
-const DATABASE_CONNECTION_TIMEOUT_MS = 1500;
+const DEFAULT_DATABASE_CONNECTION_TIMEOUT_MS = 5_000;
 
 export function createDatabaseClient(
   connectionString: string,
+  options?: {
+    connectionTimeoutMs?: number;
+  },
 ): NodePgDatabase<typeof schema> {
   const pool = new Pool({
     connectionString,
-    connectionTimeoutMillis: DATABASE_CONNECTION_TIMEOUT_MS,
+    connectionTimeoutMillis:
+      options?.connectionTimeoutMs ?? DEFAULT_DATABASE_CONNECTION_TIMEOUT_MS,
   });
 
   return drizzle({

@@ -1,6 +1,20 @@
 import type { DashboardPair } from "@trendx/api";
 
 const liveReason = "Coinank live market data loaded for dashboard pairs.";
+const coinankUnavailableReason =
+  "Coinank market data is unavailable. Serving seeded dashboard overview.";
+const okxPublicLiveReason =
+  "OKX public market data loaded for dashboard pairs.";
+const okxPublicDatabaseFallbackReason =
+  "Local database market snapshots are serving as fallback after OKX public fetch failures.";
+const okxPublicUnavailableReason =
+  "OKX public market data is unavailable. Serving seeded dashboard overview.";
+const binancePublicLiveReason =
+  "Binance public market data loaded for dashboard pairs.";
+const binancePublicDatabaseFallbackReason =
+  "Local database market snapshots are serving as fallback after Binance public fetch failures.";
+const binancePublicUnavailableReason =
+  "Binance public market data is unavailable. Serving seeded dashboard overview.";
 const coinankDatabaseMissingKeyFallbackReason =
   "Local database market snapshots are serving as fallback because Coinank is not configured.";
 const coinankDatabaseFallbackReason =
@@ -26,8 +40,16 @@ const seededOverviewReason =
   "Seeded overview ready for PR1 dashboard scaffolding.";
 const fallbackReasonPattern =
   /([A-Z]+USDT) is using seeded fallback data after a Coinank fetch failure\./;
+const binancePublicFallbackPattern =
+  /([A-Z]+USDT) is using seeded fallback data after a Binance public fetch failure\./;
+const okxPublicFallbackPattern =
+  /([A-Z]+USDT) is using seeded fallback data after a OKX public fetch failure\./;
 const coinankDatabaseFallbackPattern =
   /([A-Z]+USDT) is using local database fallback data after a Coinank fetch failure\./;
+const okxPublicDatabaseFallbackPattern =
+  /([A-Z]+USDT) is using local database fallback data after a OKX public fetch failure\./;
+const binancePublicDatabaseFallbackPattern =
+  /([A-Z]+USDT) is using local database fallback data after a Binance public fetch failure\./;
 const localDatabaseFallbackPattern =
   /([A-Z]+USDT) has no persisted local market snapshot yet\. Serving seeded fallback data\./;
 const localDatabaseStaleFallbackPattern =
@@ -40,6 +62,34 @@ const refinedLiveRationalePattern =
 export function localizeFeedReasonNote(note: string): string {
   if (note === liveReason) {
     return "Coinank 实时行情已载入当前监控交易对。";
+  }
+
+  if (note === coinankUnavailableReason) {
+    return "Coinank 行情当前不可用，已回退为种子仪表盘数据。";
+  }
+
+  if (note === okxPublicLiveReason) {
+    return "OKX 公共行情已载入当前监控交易对。";
+  }
+
+  if (note === okxPublicUnavailableReason) {
+    return "OKX 公共行情当前不可用，已回退为种子仪表盘数据。";
+  }
+
+  if (note === okxPublicDatabaseFallbackReason) {
+    return "OKX 公共行情拉取失败时，当前已改用本地数据库快照回退。";
+  }
+
+  if (note === binancePublicLiveReason) {
+    return "Binance 公共行情已载入当前监控交易对。";
+  }
+
+  if (note === binancePublicUnavailableReason) {
+    return "Binance 公共行情当前不可用，已回退为种子仪表盘数据。";
+  }
+
+  if (note === binancePublicDatabaseFallbackReason) {
+    return "Binance 公共行情拉取失败时，当前已改用本地数据库快照回退。";
   }
 
   if (note === coinankDatabaseMissingKeyFallbackReason) {
@@ -101,6 +151,32 @@ export function localizeFeedReasonNote(note: string): string {
 
   if (coinankDatabaseFallbackMatch) {
     return `${coinankDatabaseFallbackMatch[1]} 因 Coinank 拉取失败，当前使用本地数据库快照回退。`;
+  }
+
+  const okxPublicDatabaseFallbackMatch =
+    okxPublicDatabaseFallbackPattern.exec(note);
+
+  if (okxPublicDatabaseFallbackMatch) {
+    return `${okxPublicDatabaseFallbackMatch[1]} 因 OKX 公共行情拉取失败，当前使用本地数据库快照回退。`;
+  }
+
+  const binancePublicDatabaseFallbackMatch =
+    binancePublicDatabaseFallbackPattern.exec(note);
+
+  if (binancePublicDatabaseFallbackMatch) {
+    return `${binancePublicDatabaseFallbackMatch[1]} 因 Binance 公共行情拉取失败，当前使用本地数据库快照回退。`;
+  }
+
+  const binancePublicFallbackMatch = binancePublicFallbackPattern.exec(note);
+
+  if (binancePublicFallbackMatch) {
+    return `${binancePublicFallbackMatch[1]} 因 Binance 公共行情拉取失败，当前使用种子回退数据。`;
+  }
+
+  const okxPublicFallbackMatch = okxPublicFallbackPattern.exec(note);
+
+  if (okxPublicFallbackMatch) {
+    return `${okxPublicFallbackMatch[1]} 因 OKX 公共行情拉取失败，当前使用种子回退数据。`;
   }
 
   const localDatabaseFallbackMatch = localDatabaseFallbackPattern.exec(note);

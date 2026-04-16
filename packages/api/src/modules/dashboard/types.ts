@@ -111,9 +111,11 @@ export const marketNewsModeSchema = z.enum(["live", "mixed", "fallback"]);
 export const dashboardFeedModeSchema = z.enum(["live", "mixed", "fallback"]);
 export const dashboardFeedPairModeSchema = z.enum(["live", "fallback"]);
 export const dashboardFeedMarketSourceSchema = z.enum([
+  "binance",
   "coinank",
   "database",
   "mixed",
+  "okx",
   "seeded",
 ]);
 export const dashboardFeedAccountRiskModeSchema = z.enum(["live", "reference"]);
@@ -122,8 +124,10 @@ export const dashboardFeedAccountRiskSourceSchema = z.enum([
   "reference",
 ]);
 export const dashboardFeedPairSourceSchema = z.enum([
+  "binance",
   "coinank",
   "database",
+  "okx",
   "seeded",
 ]);
 export const executionHistoryItemTypeSchema = z.enum([

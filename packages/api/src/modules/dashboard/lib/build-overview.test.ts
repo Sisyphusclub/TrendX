@@ -70,3 +70,44 @@ test("buildDashboardOverviewFromMarketData preserves fallback feed state", async
     /Account risk remains reference-only until Binance execution is integrated/,
   );
 });
+
+test("buildDashboardOverviewFromMarketData uses latest feed capturedAt as generatedAt", async () => {
+  const capturedAt = "2026-04-15T02:00:00.000Z";
+  const marketDataResult: DashboardMarketDataProviderResult = {
+    killSwitchEnabled: false,
+    mode: "live",
+    notes: ["OKX public market data loaded for dashboard pairs."],
+    pairs: [
+      {
+        fallbackPair: buildSeededDashboardPair("BTCUSDT"),
+        feed: {
+          capturedAt,
+          mode: "live",
+          note: "OKX public market data loaded for dashboard pairs.",
+          source: "okx",
+          symbol: "BTCUSDT",
+        },
+        snapshot: null,
+      },
+      {
+        fallbackPair: buildSeededDashboardPair("ETHUSDT"),
+        feed: {
+          capturedAt,
+          mode: "live",
+          note: "OKX public market data loaded for dashboard pairs.",
+          source: "okx",
+          symbol: "ETHUSDT",
+        },
+        snapshot: null,
+      },
+    ],
+    source: "okx",
+  };
+
+  delete process.env.TRENDX_BINANCE_API_KEY;
+  delete process.env.TRENDX_BINANCE_API_SECRET;
+
+  const result = await buildDashboardOverviewFromMarketData(marketDataResult);
+
+  assert.equal(result.overview.generatedAt, capturedAt);
+});

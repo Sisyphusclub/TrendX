@@ -86,8 +86,8 @@ function buildSeededMarketNewsItems(
         readCount: 0,
         source: "TrendX Seed",
         summary:
-          "Coinank 实时新闻流暂时不可用，TrendX 正在保留参考快讯位并等待下次同步。",
-        title: "Coinank 快讯通道暂时不可用",
+          "实时外部新闻流当前未启用，TrendX 正在展示本地参考快讯并等待下一次同步。",
+        title: "实时新闻通道当前未启用",
       },
       {
         category,
@@ -121,8 +121,8 @@ function buildSeededMarketNewsItems(
       readCount: 0,
       source: "TrendX Seed",
       summary:
-        "Coinank 新闻接口已经接入 TrendX，当实时请求失败时，这里会自动回退到参考头条。",
-      title: "TrendX 已接入 Coinank 新闻接口",
+        "TrendX 当前默认使用本地参考新闻源，后续可按需要切回实时外部新闻接口。",
+      title: "TrendX 当前使用本地参考新闻源",
     },
     {
       category,

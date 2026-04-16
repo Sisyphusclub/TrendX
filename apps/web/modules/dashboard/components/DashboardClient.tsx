@@ -7,7 +7,11 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 
 import { orpc } from "@/lib/orpc";
-import { getDashboardFeedState, getPairFeedMode } from "../lib/feed-state";
+import {
+  getDashboardFeedState,
+  getPairFeedCapturedAt,
+  getPairFeedMode,
+} from "../lib/feed-state";
 import {
   type DashboardSection,
   dashboardSectionMeta,
@@ -125,6 +129,10 @@ export function DashboardClient({
             <PairSignalCard
               accountEquity={overview.accountRisk.equity}
               executionConfig={overview.executionConfig}
+              feedCapturedAt={getPairFeedCapturedAt(
+                feedState,
+                activePair.symbol,
+              )}
               pair={activePair}
               feedMode={getPairFeedMode(feedState, activePair.symbol)}
               isReferenceRisk={feedState.hasReferenceRisk}

@@ -2,6 +2,12 @@ import { createDatabaseClient, type TrendXDatabase } from "@trendx/database";
 import { z } from "zod";
 
 const databaseEnvSchema = z.object({
+  TRENDX_DATABASE_CONNECTION_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(60_000)
+    .default(5_000),
   DATABASE_URL: z.string().min(1).optional(),
 });
 
@@ -12,7 +18,8 @@ export function getDatabaseClient(): TrendXDatabase | null {
     return databaseClient;
   }
 
-  const databaseUrl = databaseEnvSchema.parse(process.env).DATABASE_URL?.trim();
+  const env = databaseEnvSchema.parse(process.env);
+  const databaseUrl = env.DATABASE_URL?.trim();
 
   if (!databaseUrl) {
     databaseClient = null;
@@ -20,7 +27,9 @@ export function getDatabaseClient(): TrendXDatabase | null {
     return databaseClient;
   }
 
-  databaseClient = createDatabaseClient(databaseUrl);
+  databaseClient = createDatabaseClient(databaseUrl, {
+    connectionTimeoutMs: env.TRENDX_DATABASE_CONNECTION_TIMEOUT_MS,
+  });
 
   return databaseClient;
 }

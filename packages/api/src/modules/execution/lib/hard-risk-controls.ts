@@ -45,6 +45,31 @@ function getDailyLossPct(
   return (Math.abs(accountRisk.dailyPnl) / accountRisk.equity) * 100;
 }
 
+function hasCurrentPairFeedCycle(
+  overviewResult: GetDashboardOverviewOutput,
+  symbol: DashboardPair["symbol"],
+): boolean {
+  const pairFeed = overviewResult.feed.pairs.find(
+    (candidate) => candidate.symbol === symbol,
+  );
+
+  if (!pairFeed?.capturedAt) {
+    return false;
+  }
+
+  const timeframe = getSignalTimeframe();
+  const expectedCycle = getCycleCapturedAt(
+    overviewResult.overview.generatedAt,
+    timeframe,
+  ).getTime();
+  const actualCycle = getCycleCapturedAt(
+    pairFeed.capturedAt,
+    timeframe,
+  ).getTime();
+
+  return expectedCycle === actualCycle;
+}
+
 async function hasCurrentSignalCycleRecord(
   symbol: DashboardPair["symbol"],
   overviewGeneratedAt: string,
@@ -144,6 +169,15 @@ export async function getHardRiskBlockReason(params: {
   }
 
   if (hardRisk.requireCurrentSignalCycle) {
+    const hasCurrentPairFeed = hasCurrentPairFeedCycle(
+      params.overviewResult,
+      params.pair.symbol,
+    );
+
+    if (!hasCurrentPairFeed) {
+      return "硬风控拦截：当前交易对快照不是本小时最新周期，禁止执行。";
+    }
+
     const hasCurrentSignalCycle = await hasCurrentSignalCycleRecord(
       params.pair.symbol,
       params.overviewResult.overview.generatedAt,

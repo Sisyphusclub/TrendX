@@ -2,6 +2,7 @@ import type { DashboardOverview } from "@trendx/api";
 import type { ReactElement } from "react";
 
 import type { DashboardFeedState } from "../lib/feed-state";
+import { formatFeedCapturedAt } from "../lib/formatters";
 
 interface DeskStatusStripProps {
   feedState: DashboardFeedState;
@@ -72,7 +73,7 @@ export function DeskStatusStrip({
               </p>
               <p className="text-[11px] text-[color:var(--color-muted)]">
                 {item.key === "feed"
-                  ? `${overview.pairs.length} 对监控`
+                  ? formatFeedCapturedAt(feedState.latestCapturedAt)
                   : item.key === "killSwitch"
                     ? "全局开关"
                     : item.key === "riskModel"

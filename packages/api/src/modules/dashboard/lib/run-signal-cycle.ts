@@ -29,6 +29,10 @@ interface PersistedSignalPairSummary {
 export interface RunDashboardSignalCycleResult {
   accountSnapshotId: string;
   cycleCapturedAt: string;
+  durationMs: number;
+  marketDataMode: GetDashboardOverviewOutput["feed"]["marketDataMode"];
+  marketDataSource: GetDashboardOverviewOutput["feed"]["marketDataSource"];
+  providerSummary: Record<string, number>;
   pairs: PersistedSignalPairSummary[];
   reason: string;
   success: true;
@@ -44,6 +48,16 @@ function toJsonObject(value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>;
+}
+
+function countBy(values: string[]): Record<string, number> {
+  const counts = new Map<string, number>();
+
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  return Object.fromEntries(counts);
 }
 
 export function getSignalTimeframe(): string {
@@ -353,6 +367,7 @@ export async function persistDashboardPairSignalSnapshot(params: {
 }
 
 export async function runDashboardSignalCycle(): Promise<RunDashboardSignalCycleResult> {
+  const startedAt = Date.now();
   const marketDataResult = await loadDashboardMarketDataForSignalCycle();
   const overviewResult =
     await buildDashboardOverviewFromMarketData(marketDataResult);
@@ -390,17 +405,29 @@ export async function runDashboardSignalCycle(): Promise<RunDashboardSignalCycle
   logger.info("TrendX signal cycle persisted", {
     accountSnapshotId,
     cycleCapturedAt: cycleCapturedAt.toISOString(),
+    durationMs: Date.now() - startedAt,
+    marketDataMode: overviewResult.feed.marketDataMode,
+    marketDataSource: overviewResult.feed.marketDataSource,
     pairs: pairs.map((pair) => ({
       action: pair.action,
       confirmationCount: pair.confirmationCount,
       symbol: pair.symbol,
       updatedExistingSignal: pair.updatedExistingSignal,
     })),
+    providerSummary: countBy(
+      overviewResult.feed.pairs.map((pair) => pair.source),
+    ),
   });
 
   return {
     accountSnapshotId,
     cycleCapturedAt: cycleCapturedAt.toISOString(),
+    durationMs: Date.now() - startedAt,
+    marketDataMode: overviewResult.feed.marketDataMode,
+    marketDataSource: overviewResult.feed.marketDataSource,
+    providerSummary: countBy(
+      overviewResult.feed.pairs.map((pair) => pair.source),
+    ),
     pairs,
     reason: overviewResult.reason,
     success: true,

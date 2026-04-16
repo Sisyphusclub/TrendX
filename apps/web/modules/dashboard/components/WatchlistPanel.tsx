@@ -5,10 +5,11 @@ import type { ReactElement } from "react";
 import { Panel } from "@/modules/shared/components/Panel";
 
 import type { DashboardFeedState } from "../lib/feed-state";
-import { getPairFeedMode } from "../lib/feed-state";
+import { getPairFeedCapturedAt, getPairFeedMode } from "../lib/feed-state";
 import {
   formatCheckSummary,
   formatExecutionStatus,
+  formatFeedCapturedAt,
   formatFeedMode,
   formatPct,
   formatSignalLabel,
@@ -77,17 +78,26 @@ export function WatchlistPanel({
               <div>
                 {(() => {
                   const feedMode = getPairFeedMode(feedState, pair.symbol);
+                  const feedCapturedAt = getPairFeedCapturedAt(
+                    feedState,
+                    pair.symbol,
+                  );
 
                   return (
-                    <span
-                      className={
-                        feedMode === "fallback"
-                          ? "inline-flex rounded-full border border-[color:var(--color-wait)]/20 bg-[color:var(--color-wait-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--color-wait)]"
-                          : "inline-flex rounded-full border border-[color:var(--color-blue)]/16 bg-[color:var(--color-blue-fog)] px-3 py-1 text-xs font-semibold text-[color:var(--color-blue)]"
-                      }
-                    >
-                      {formatFeedMode(feedMode)}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span
+                        className={
+                          feedMode === "fallback"
+                            ? "inline-flex w-fit rounded-full border border-[color:var(--color-wait)]/20 bg-[color:var(--color-wait-soft)] px-3 py-1 text-xs font-semibold text-[color:var(--color-wait)]"
+                            : "inline-flex w-fit rounded-full border border-[color:var(--color-blue)]/16 bg-[color:var(--color-blue-fog)] px-3 py-1 text-xs font-semibold text-[color:var(--color-blue)]"
+                        }
+                      >
+                        {formatFeedMode(feedMode)}
+                      </span>
+                      <span className="text-xs text-[color:var(--color-muted)]">
+                        {formatFeedCapturedAt(feedCapturedAt)}
+                      </span>
+                    </div>
                   );
                 })()}
               </div>

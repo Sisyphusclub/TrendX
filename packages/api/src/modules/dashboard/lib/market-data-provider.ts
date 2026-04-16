@@ -4,6 +4,14 @@ import { logger } from "@trendx/logs";
 import { z } from "zod";
 
 import { getDatabaseClient } from "../../../lib/database";
+import {
+  fetchBinancePublicPairSnapshot,
+  getBinancePublicMarketConfig,
+} from "../../exchange/lib/binance-public-client";
+import {
+  fetchOkxPublicPairSnapshot,
+  getOkxPublicMarketConfig,
+} from "../../exchange/lib/okx-public-client";
 import type { DashboardPair } from "../types";
 import {
   type CoinankDashboardConfig,
@@ -16,10 +24,24 @@ const COINANK_LIVE_NOTE =
   "Coinank live market data loaded for dashboard pairs.";
 const COINANK_MISSING_KEY_NOTE =
   "Coinank API key missing. Serving seeded dashboard overview.";
+const COINANK_UNAVAILABLE_NOTE =
+  "Coinank market data is unavailable. Serving seeded dashboard overview.";
 const COINANK_DATABASE_MISSING_KEY_FALLBACK_NOTE =
   "Local database market snapshots are serving as fallback because Coinank is not configured.";
 const COINANK_DATABASE_FALLBACK_NOTE =
   "Local database market snapshots are serving as fallback after Coinank fetch failures.";
+const BINANCE_PUBLIC_LIVE_NOTE =
+  "Binance public market data loaded for dashboard pairs.";
+const BINANCE_PUBLIC_DATABASE_FALLBACK_NOTE =
+  "Local database market snapshots are serving as fallback after Binance public fetch failures.";
+const BINANCE_PUBLIC_UNAVAILABLE_NOTE =
+  "Binance public market data is unavailable. Serving seeded dashboard overview.";
+const OKX_PUBLIC_LIVE_NOTE =
+  "OKX public market data loaded for dashboard pairs.";
+const OKX_PUBLIC_DATABASE_FALLBACK_NOTE =
+  "Local database market snapshots are serving as fallback after OKX public fetch failures.";
+const OKX_PUBLIC_UNAVAILABLE_NOTE =
+  "OKX public market data is unavailable. Serving seeded dashboard overview.";
 const LOCAL_DB_LIVE_NOTE =
   "Local database market snapshots loaded for dashboard pairs.";
 const LOCAL_DB_EMPTY_NOTE =
@@ -34,23 +56,34 @@ const trackedSymbolSchema = z.enum(trackedSymbols);
 const marketDataProviderEnvSchema = z.object({
   TRENDX_DEFAULT_PAIRS: z.string().default("BTCUSDT,ETHUSDT"),
   TRENDX_MARKET_DATA_PROVIDER: z
-    .enum(["coinank", "local-db"])
-    .default("coinank"),
+    .enum(["coinank", "binance-public", "okx-public", "local-db"])
+    .default("local-db"),
   TRENDX_SIGNAL_CYCLE_MARKET_DATA_PROVIDER: z
-    .enum(["coinank", "local-db"])
-    .default("coinank"),
+    .enum(["coinank", "binance-public", "okx-public", "local-db"])
+    .default("okx-public"),
   TRENDX_SIGNAL_INTERVAL: z.string().min(1).default("1h"),
 });
 
 export type DashboardMarketDataMode = "fallback" | "live" | "mixed";
 export type DashboardMarketDataPairMode = "fallback" | "live";
-export type DashboardMarketDataPairSource = "coinank" | "database" | "seeded";
+export type DashboardMarketDataPairSource =
+  | "binance"
+  | "coinank"
+  | "database"
+  | "okx"
+  | "seeded";
 export type DashboardMarketDataSource =
+  | "binance"
   | "coinank"
   | "database"
   | "mixed"
+  | "okx"
   | "seeded";
-export type DashboardMarketDataProviderKind = "coinank" | "local-db";
+export type DashboardMarketDataProviderKind =
+  | "binance-public"
+  | "coinank"
+  | "local-db"
+  | "okx-public";
 
 export interface DashboardMarketDataCandle {
   begin: number;
@@ -172,7 +205,7 @@ const persistedMarketDataInputFeedSchema = z.object({
   capturedAt: z.string().datetime().nullable().optional(),
   mode: z.enum(["fallback", "live"]),
   note: z.string().min(1),
-  source: z.enum(["coinank", "database", "seeded"]),
+  source: z.enum(["binance", "coinank", "database", "okx", "seeded"]),
   symbol: trackedSymbolSchema,
 });
 
@@ -264,6 +297,13 @@ function hasAnyLivePair(pairs: DashboardMarketDataPairResult[]): boolean {
   return pairs.some((pair) => pair.feed.mode === "live");
 }
 
+function mergeProviderNotes(
+  primaryNotes: string[],
+  fallbackNotes: string[],
+): string[] {
+  return Array.from(new Set([...primaryNotes, ...fallbackNotes]));
+}
+
 function toMarketDataSnapshot(params: {
   interval: string;
   snapshot: Awaited<ReturnType<typeof fetchCoinankPairSnapshot>>;
@@ -330,8 +370,12 @@ function resolveAggregateMarketDataSource(
           source,
         ): source is Extract<
           DashboardMarketDataPairSource,
-          "coinank" | "database"
-        > => source === "coinank" || source === "database",
+          "binance" | "coinank" | "database" | "okx"
+        > =>
+          source === "coinank" ||
+          source === "database" ||
+          source === "binance" ||
+          source === "okx",
       ),
   );
 
@@ -396,6 +440,150 @@ async function loadCoinankSnapshot(
         note: `${symbol} is using seeded fallback data after a Coinank fetch failure.`,
         source: "seeded",
         symbol,
+      },
+      snapshot: null,
+    };
+  }
+}
+
+async function loadBinancePublicSnapshot(params: {
+  interval: string;
+  symbol: DashboardPair["symbol"];
+}): Promise<DashboardMarketDataPairResult> {
+  const fallbackPair = buildSeededDashboardPair(params.symbol);
+  const config = getBinancePublicMarketConfig();
+
+  try {
+    const snapshot = await fetchBinancePublicPairSnapshot({
+      config,
+      interval: params.interval,
+      symbol: params.symbol,
+    });
+
+    return {
+      fallbackPair,
+      feed: {
+        capturedAt:
+          toIsoTimestamp(snapshot.priceCandles.at(-1)?.begin ?? Date.now()) ??
+          new Date().toISOString(),
+        mode: "live",
+        note: BINANCE_PUBLIC_LIVE_NOTE,
+        source: "binance",
+        symbol: params.symbol,
+      },
+      snapshot: {
+        cvdBiasPct: null,
+        fundingRateCandles: snapshot.fundingRateCandles,
+        interval: params.interval,
+        liquidations: snapshot.liquidations,
+        longShortRealtime: snapshot.longShortRealtime,
+        openInterestCandles: snapshot.openInterestCandles,
+        priceCandles: snapshot.priceCandles,
+        refinedPriceCandles: snapshot.refinedPriceCandles,
+        symbol: params.symbol,
+      },
+    };
+  } catch (error) {
+    logger.warn("Falling back after Binance public fetch failure", {
+      error: error instanceof Error ? error.message : String(error),
+      symbol: params.symbol,
+    });
+
+    const databaseFallback = await loadDatabaseSnapshot({
+      symbol: params.symbol,
+      timeframe: params.interval,
+    });
+
+    if (databaseFallback.snapshot) {
+      return {
+        ...databaseFallback,
+        feed: {
+          ...databaseFallback.feed,
+          note: `${params.symbol} is using local database fallback data after a Binance public fetch failure.`,
+        },
+      };
+    }
+
+    return {
+      fallbackPair,
+      feed: {
+        capturedAt: null,
+        mode: "fallback",
+        note: `${params.symbol} is using seeded fallback data after a Binance public fetch failure.`,
+        source: "seeded",
+        symbol: params.symbol,
+      },
+      snapshot: null,
+    };
+  }
+}
+
+async function loadOkxPublicSnapshot(params: {
+  interval: string;
+  symbol: DashboardPair["symbol"];
+}): Promise<DashboardMarketDataPairResult> {
+  const fallbackPair = buildSeededDashboardPair(params.symbol);
+  const config = getOkxPublicMarketConfig();
+
+  try {
+    const snapshot = await fetchOkxPublicPairSnapshot({
+      config,
+      interval: params.interval,
+      symbol: params.symbol,
+    });
+
+    return {
+      fallbackPair,
+      feed: {
+        capturedAt:
+          toIsoTimestamp(snapshot.priceCandles.at(-1)?.begin ?? Date.now()) ??
+          new Date().toISOString(),
+        mode: "live",
+        note: OKX_PUBLIC_LIVE_NOTE,
+        source: "okx",
+        symbol: params.symbol,
+      },
+      snapshot: {
+        cvdBiasPct: null,
+        fundingRateCandles: snapshot.fundingRateCandles,
+        interval: params.interval,
+        liquidations: snapshot.liquidations,
+        longShortRealtime: snapshot.longShortRealtime,
+        openInterestCandles: snapshot.openInterestCandles,
+        priceCandles: snapshot.priceCandles,
+        refinedPriceCandles: snapshot.refinedPriceCandles,
+        symbol: params.symbol,
+      },
+    };
+  } catch (error) {
+    logger.warn("Falling back after OKX public fetch failure", {
+      error: error instanceof Error ? error.message : String(error),
+      symbol: params.symbol,
+    });
+
+    const databaseFallback = await loadDatabaseSnapshot({
+      symbol: params.symbol,
+      timeframe: params.interval,
+    });
+
+    if (databaseFallback.snapshot) {
+      return {
+        ...databaseFallback,
+        feed: {
+          ...databaseFallback.feed,
+          note: `${params.symbol} is using local database fallback data after a OKX public fetch failure.`,
+        },
+      };
+    }
+
+    return {
+      fallbackPair,
+      feed: {
+        capturedAt: null,
+        mode: "fallback",
+        note: `${params.symbol} is using seeded fallback data after a OKX public fetch failure.`,
+        source: "seeded",
+        symbol: params.symbol,
       },
       snapshot: null,
     };
@@ -603,7 +791,82 @@ export async function loadDashboardMarketData(params?: {
   const provider = params?.provider ?? runtimeConfig.provider;
 
   if (provider === "local-db") {
-    return await loadDashboardMarketDataFromDatabase(runtimeConfig);
+    const localDbResult =
+      await loadDashboardMarketDataFromDatabase(runtimeConfig);
+
+    if (
+      localDbResult.mode === "live" ||
+      runtimeConfig.signalCycleProvider === "local-db"
+    ) {
+      return localDbResult;
+    }
+
+    const fallbackResult = await loadDashboardMarketData({
+      provider: runtimeConfig.signalCycleProvider,
+    });
+
+    return {
+      ...fallbackResult,
+      notes: mergeProviderNotes(localDbResult.notes, fallbackResult.notes),
+    };
+  }
+
+  if (provider === "binance-public") {
+    const pairs = await Promise.all(
+      runtimeConfig.trackedPairs.map((symbol) =>
+        loadBinancePublicSnapshot({
+          interval: runtimeConfig.timeframe,
+          symbol,
+        }),
+      ),
+    );
+    const mode = resolveMarketDataMode(pairs);
+
+    return {
+      killSwitchEnabled: false,
+      mode,
+      notes: [
+        pairs.some((pair) => pair.feed.source === "database")
+          ? BINANCE_PUBLIC_DATABASE_FALLBACK_NOTE
+          : hasAnyLivePair(pairs)
+            ? BINANCE_PUBLIC_LIVE_NOTE
+            : BINANCE_PUBLIC_UNAVAILABLE_NOTE,
+        ...pairs
+          .filter((pair) => pair.feed.mode === "fallback")
+          .map((pair) => pair.feed.note),
+      ],
+      pairs,
+      source: resolveAggregateMarketDataSource(pairs, mode),
+    };
+  }
+
+  if (provider === "okx-public") {
+    const pairs = await Promise.all(
+      runtimeConfig.trackedPairs.map((symbol) =>
+        loadOkxPublicSnapshot({
+          interval: runtimeConfig.timeframe,
+          symbol,
+        }),
+      ),
+    );
+    const mode = resolveMarketDataMode(pairs);
+
+    return {
+      killSwitchEnabled: false,
+      mode,
+      notes: [
+        pairs.some((pair) => pair.feed.source === "database")
+          ? OKX_PUBLIC_DATABASE_FALLBACK_NOTE
+          : hasAnyLivePair(pairs)
+            ? OKX_PUBLIC_LIVE_NOTE
+            : OKX_PUBLIC_UNAVAILABLE_NOTE,
+        ...pairs
+          .filter((pair) => pair.feed.mode === "fallback")
+          .map((pair) => pair.feed.note),
+      ],
+      pairs,
+      source: resolveAggregateMarketDataSource(pairs, mode),
+    };
   }
 
   const config = getCoinankDashboardConfig();
@@ -658,7 +921,9 @@ export async function loadDashboardMarketData(params?: {
     notes: [
       pairs.some((pair) => pair.feed.source === "database")
         ? COINANK_DATABASE_FALLBACK_NOTE
-        : COINANK_LIVE_NOTE,
+        : hasAnyLivePair(pairs)
+          ? COINANK_LIVE_NOTE
+          : COINANK_UNAVAILABLE_NOTE,
       ...pairs
         .filter((pair) => pair.feed.mode === "fallback")
         .map((pair) => pair.feed.note),

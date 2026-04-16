@@ -104,6 +104,38 @@ export function formatFeedMode(value: "fallback" | "live"): string {
   return "实时信号";
 }
 
+export function formatFeedCapturedAt(value: string | null): string {
+  if (!value) {
+    return "无快照";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "快照异常";
+  }
+
+  const now = new Date();
+  const isSameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isSameDay) {
+    return `快照 ${date.toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+  }
+
+  return `快照 ${date.toLocaleString("zh-CN", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+  })}`;
+}
+
 export function formatEntryStageStatus(
   value: DashboardPair["entryStages"][number]["status"],
 ): string {

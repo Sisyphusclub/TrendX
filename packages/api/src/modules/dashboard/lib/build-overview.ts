@@ -63,6 +63,18 @@ function applyExchangePositionToPair(
   };
 }
 
+function resolveOverviewGeneratedAt(
+  marketDataResult: DashboardMarketDataProviderResult,
+): string {
+  const latestCapturedAt =
+    marketDataResult.pairs
+      .map((pair) => pair.feed.capturedAt)
+      .filter((capturedAt): capturedAt is string => capturedAt !== null)
+      .sort((left, right) => right.localeCompare(left))[0] ?? null;
+
+  return latestCapturedAt ?? new Date().toISOString();
+}
+
 export async function buildDashboardOverviewFromMarketData(
   marketDataResult: DashboardMarketDataProviderResult,
 ): Promise<GetDashboardOverviewOutput> {
@@ -77,6 +89,7 @@ export async function buildDashboardOverviewFromMarketData(
       ? accountStateResult[0].value
       : null;
   const reasons: string[] = [];
+  const generatedAt = resolveOverviewGeneratedAt(marketDataResult);
   const [marketSummaryNote, ...marketFallbackNotes] = marketDataResult.notes;
 
   if (marketSummaryNote) {
@@ -128,7 +141,7 @@ export async function buildDashboardOverviewFromMarketData(
       accountRisk: accountState?.accountRisk ?? buildReferenceAccountRisk(),
       cadenceMinutes: 60,
       executionConfig: DASHBOARD_EXECUTION_CONFIG,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       killSwitchEnabled: marketDataResult.killSwitchEnabled,
       operatorMode: "AUTOMATED",
       pairs: pairs.map((pair) =>

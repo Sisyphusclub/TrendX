@@ -26,6 +26,7 @@ import {
   formatCompact,
   formatEntryStageStatus,
   formatExecutionStatus,
+  formatFeedCapturedAt,
   formatFeedMode,
   formatPct,
   formatPositionSide,
@@ -36,6 +37,7 @@ import {
 
 interface PairSignalCardProps {
   accountEquity: number;
+  feedCapturedAt: string | null;
   executionConfig: DashboardExecutionConfig;
   feedMode: "fallback" | "live";
   isReferenceRisk: boolean;
@@ -110,6 +112,7 @@ function getEntryStageTone(
 
 export function PairSignalCard({
   accountEquity,
+  feedCapturedAt,
   executionConfig,
   feedMode,
   isReferenceRisk,
@@ -224,6 +227,9 @@ export function PairSignalCard({
         </span>
         <span className="mono text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-muted)]">
           标记价 {formatUsd(pair.markPrice)}
+        </span>
+        <span className="mono text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-muted)]">
+          {formatFeedCapturedAt(feedCapturedAt)}
         </span>
       </div>
 

@@ -51,6 +51,11 @@ loadWorkspaceEnv();
 
 (async () => {
   const shouldRefresh = process.argv.includes("--refresh");
+  const providerArg = process.argv.find((arg) => arg.startsWith("--provider="));
+  const sourceProvider =
+    providerArg?.split("=")[1] ??
+    process.env.TRENDX_SIGNAL_CYCLE_MARKET_DATA_PROVIDER ??
+    "okx-public";
   const { buildDashboardOverviewFromMarketData } = await import(
     "../packages/api/src/modules/dashboard/lib/build-overview.ts"
   );
@@ -68,14 +73,14 @@ loadWorkspaceEnv();
     await runDashboardSignalCycle();
   }
 
-  const coinankMarketData = await loadDashboardMarketData({
-    provider: "coinank",
+  const sourceMarketData = await loadDashboardMarketData({
+    provider: sourceProvider,
   });
   const localDbMarketData = await loadDashboardMarketData({
     provider: "local-db",
   });
-  const coinankOverview =
-    await buildDashboardOverviewFromMarketData(coinankMarketData);
+  const sourceOverview =
+    await buildDashboardOverviewFromMarketData(sourceMarketData);
   const localDbOverview =
     await buildDashboardOverviewFromMarketData(localDbMarketData);
   const db = createDatabaseClient(
@@ -102,29 +107,30 @@ loadWorkspaceEnv();
     }
   }
 
-  const pairComparisons = coinankOverview.overview.pairs.map((coinankPair) => {
+  const pairComparisons = sourceOverview.overview.pairs.map((sourcePair) => {
     const localDbPair = localDbOverview.overview.pairs.find(
-      (pair) => pair.symbol === coinankPair.symbol,
+      (pair) => pair.symbol === sourcePair.symbol,
     );
 
     if (!localDbPair) {
       return {
         missingLocalDbPair: true,
-        symbol: coinankPair.symbol,
+        symbol: sourcePair.symbol,
       };
     }
 
-    return comparePairMetrics(coinankPair, localDbPair);
+    return comparePairMetrics(sourcePair, localDbPair);
   });
 
   console.log(
     JSON.stringify(
       {
-        coinankFeed: coinankOverview.feed,
-        localDbSnapshotMeta: Array.from(latestLocalSnapshotBySymbol.values()),
         localDbFeed: localDbOverview.feed,
+        localDbSnapshotMeta: Array.from(latestLocalSnapshotBySymbol.values()),
         pairComparisons,
         refreshedBeforeCompare: shouldRefresh,
+        sourceFeed: sourceOverview.feed,
+        sourceProvider,
       },
       null,
       2,

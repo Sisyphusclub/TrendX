@@ -17,8 +17,9 @@ import { authClient } from "@/lib/auth-client";
 import { authSecondaryButtonClassName } from "@/modules/auth/lib/styles";
 
 import type { DashboardFeedState } from "../lib/feed-state";
-import { getPairFeedMode } from "../lib/feed-state";
+import { getPairFeedCapturedAt, getPairFeedMode } from "../lib/feed-state";
 import {
+  formatFeedCapturedAt,
   formatFeedMode,
   formatSignalLabel,
   formatTrendDirection,
@@ -156,6 +157,10 @@ export function DeskNavigationRail({
         <div className="mt-3 grid min-h-0 gap-2 overflow-y-auto">
           {overview.pairs.map((pair) => {
             const feedMode = getPairFeedMode(feedState, pair.symbol);
+            const feedCapturedAt = getPairFeedCapturedAt(
+              feedState,
+              pair.symbol,
+            );
             const isActive = activeSignalSymbol === pair.symbol;
             const signalToneClass =
               pair.action === "ENTRY"
@@ -200,6 +205,8 @@ export function DeskNavigationRail({
                   >
                     {formatFeedMode(feedMode)}
                   </span>
+                  {" · "}
+                  {formatFeedCapturedAt(feedCapturedAt)}
                 </p>
               </button>
             );
